@@ -1,0 +1,42 @@
+# Environment variables (KEEP PRIVATE!)
+.env
+*.env
+.env.local
+.env.production
+
+# Virtual environment
+venv/
+env/
+ENV/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Logs (contain private information)
+*.log
+moderator_bot.log
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.temp
+temp/
+
+# Audio test files
+*.wav
+*.mp3
+*.m4a 
