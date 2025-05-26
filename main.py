@@ -32,6 +32,7 @@ logging.getLogger('urllib3').setLevel(logging.WARNING)
 
 from config import Config
 from voice_recognition_hf import VoiceRecognitionHF
+from voice_recognition_local import VoiceRecognitionLocal
 from command_processor import CommandProcessor, ModerationCommand
 from twitch_bot import TwitchModeratorBot
 
@@ -66,9 +67,14 @@ class AIModeratorBot:
             self.twitch_bot = TwitchModeratorBot(command_callback=self._on_command_executed)
             logger.info("Twitch bot initialized")
             
-            # Initialize voice recognition with Hugging Face
-            self.voice_recognition = VoiceRecognitionHF(command_callback=self._on_voice_command)
-            logger.info("Voice recognition initialized")
+            # Initialize voice recognition (choose between HF endpoint or local)
+            use_local = getattr(Config, 'USE_LOCAL_WHISPER', False)
+            if use_local:
+                self.voice_recognition = VoiceRecognitionLocal(command_callback=self._on_voice_command)
+                logger.info("Voice recognition initialized with local Whisper Large V3")
+            else:
+                self.voice_recognition = VoiceRecognitionHF(command_callback=self._on_voice_command)
+                logger.info("Voice recognition initialized with HF endpoint")
             
             return True
             
@@ -183,12 +189,17 @@ class AIModeratorBot:
     def test_microphone(self):
         """Test microphone functionality"""
         if not self.voice_recognition:
-            self.voice_recognition = VoiceRecognitionHF(lambda x: None)
+            use_local = getattr(Config, 'USE_LOCAL_WHISPER', False)
+            if use_local:
+                self.voice_recognition = VoiceRecognitionLocal(lambda x: None)
+            else:
+                self.voice_recognition = VoiceRecognitionHF(lambda x: None)
         
         return self.voice_recognition.test_microphone()
     
     def list_microphones(self):
         """List available microphones"""
+        # Both classes have the same static method
         return VoiceRecognitionHF.list_microphones()
 
 async def main():
