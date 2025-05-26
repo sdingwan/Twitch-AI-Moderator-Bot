@@ -15,6 +15,10 @@ class Config:
     # OpenAI Configuration
     OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
     
+    # Hugging Face Configuration (for Inference Endpoints)
+    HF_API_TOKEN = os.getenv('HF_API_TOKEN')
+    HF_ENDPOINT_URL = os.getenv('HF_ENDPOINT_URL')
+    
     # Voice Recognition Settings
     VOICE_ACTIVATION_KEYWORD = os.getenv('VOICE_ACTIVATION_KEYWORD', 'hey brian').lower()
     MICROPHONE_INDEX = int(os.getenv('MICROPHONE_INDEX', 0))

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 AI Moderator Bot - Voice Command Twitch Moderation
-A simple Twitch chat moderation bot that responds to voice commands using OpenAI Whisper API
+A simple Twitch chat moderation bot that responds to voice commands using cloud-hosted Whisper Large V3
 """
 
 import asyncio
@@ -31,7 +31,7 @@ logging.getLogger('openai').setLevel(logging.WARNING)
 logging.getLogger('urllib3').setLevel(logging.WARNING)
 
 from config import Config
-from voice_recognition import VoiceRecognition
+from voice_recognition_hf import VoiceRecognitionHF
 from command_processor import CommandProcessor, ModerationCommand
 from twitch_bot import TwitchModeratorBot
 
@@ -66,8 +66,8 @@ class AIModeratorBot:
             self.twitch_bot = TwitchModeratorBot(command_callback=self._on_command_executed)
             logger.info("Twitch bot initialized")
             
-            # Initialize voice recognition
-            self.voice_recognition = VoiceRecognition(command_callback=self._on_voice_command)
+            # Initialize voice recognition with Hugging Face
+            self.voice_recognition = VoiceRecognitionHF(command_callback=self._on_voice_command)
             logger.info("Voice recognition initialized")
             
             return True
@@ -103,7 +103,7 @@ class AIModeratorBot:
             logger.info("🎤 AI Moderator Bot is now running!")
             logger.info("🎯 Voice commands are active. Say 'Hey Brian' followed by your command.")
             logger.info("📝 Example: 'Hey Brian, ban username123 for 10 minutes'")
-            logger.info("🔗 Using Twitch Helix API with OpenAI Whisper API for voice recognition")
+            logger.info("🔗 Using Twitch Helix API with cloud-hosted Whisper Large V3 for voice recognition")
             
             # Keep the main thread alive
             while self.is_running:
@@ -183,13 +183,13 @@ class AIModeratorBot:
     def test_microphone(self):
         """Test microphone functionality"""
         if not self.voice_recognition:
-            self.voice_recognition = VoiceRecognition(lambda x: None)
+            self.voice_recognition = VoiceRecognitionHF(lambda x: None)
         
         return self.voice_recognition.test_microphone()
     
     def list_microphones(self):
         """List available microphones"""
-        return VoiceRecognition.list_microphones()
+        return VoiceRecognitionHF.list_microphones()
 
 async def main():
     """Main entry point"""
@@ -207,10 +207,10 @@ async def main():
             return
         elif sys.argv[1] == '--help':
             print("AI Moderator Bot - Voice Command Twitch Moderation")
-            print("Powered by OpenAI Whisper API + Twitch Helix API")
+            print("Powered by cloud-hosted Whisper Large V3 + Twitch Helix API")
             print("\nUsage:")
             print("  python main.py              - Start the bot")
-            print("  python main.py --test-mic   - Test microphone with OpenAI Whisper API")
+            print("  python main.py --test-mic   - Test microphone with cloud-hosted Whisper Large V3")
             print("  python main.py --list-mics  - List available microphones")
             print("  python main.py --help       - Show this help")
             print("\nVoice Commands:")
@@ -221,10 +221,10 @@ async def main():
             print("  'Hey Brian, slow mode 30'")
             print("  'Hey Brian, followers only mode'")
             print("\nFeatures:")
-            print("  🎤 OpenAI Whisper API for fast and accurate voice recognition")
+            print("  🎤 Cloud-hosted Whisper Large V3 for fast and accurate voice recognition")
             print("  🚀 Twitch Helix API for reliable moderation")
             print("  🤖 OpenAI GPT for complex command understanding")
-            print("  ☁️ Cloud-based processing without heavy local models")
+            print("  ☁️ Cloud-based processing with no heavy local models")
             return
     
     try:

@@ -21,21 +21,28 @@ TWITCH_CLIENT_SECRET=your_client_secret
 TWITCH_CHANNEL=your_channel_name
 TWITCH_BOT_USERNAME=your_bot_username
 OPENAI_API_KEY=your_openai_api_key_here
+HF_API_TOKEN=your_huggingface_token_here
+HF_ENDPOINT_URL=https://your-endpoint.endpoints.huggingface.cloud
 VOICE_ACTIVATION_KEYWORD=hey brian
 ```
 
-## 3. Get Twitch Credentials
+## 3. Deploy Whisper to Cloud
+1. Go to [Hugging Face Inference Endpoints](https://ui.endpoints.huggingface.co/)
+2. Create endpoint with `openai/whisper-large-v3` 
+3. Copy your API token and endpoint URL
+
+## 4. Get Twitch Credentials
 1. Go to [Twitch Developer Console](https://dev.twitch.tv/console)
 2. Create new application → Get Client ID & Secret
 3. Generate OAuth token with scopes: `channel:moderate`, `chat:edit`, `chat:read`
 
-## 4. Test & Run
+## 5. Test & Run
 ```bash
 python main.py --test-mic    # Test microphone
 python main.py              # Start bot
 ```
 
-## 5. Use Voice Commands
+## 6. Use Voice Commands
 Say: `"Hey Brian, ban username123 for 10 minutes"`
 
 That's it! 🎉 

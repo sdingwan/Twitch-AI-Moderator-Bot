@@ -8,16 +8,16 @@ import io
 import wave
 import tempfile
 import os
+import requests
 from typing import Optional, Callable
-from openai import OpenAI
 from config import Config
 
 logger = logging.getLogger(__name__)
 
-class VoiceRecognition:
+class VoiceRecognitionHF:
     def __init__(self, command_callback: Callable[[str], None]):
         """
-        Initialize voice recognition system with OpenAI Whisper API
+        Initialize voice recognition system with Hugging Face Inference Endpoints
         
         Args:
             command_callback: Function to call when a voice command is recognized
@@ -37,29 +37,29 @@ class VoiceRecognition:
         self.audio = pyaudio.PyAudio()
         self.stream = None
         
-        # Initialize OpenAI client
-        self._setup_openai_client()
+        # Initialize Hugging Face Inference Endpoint
+        self._setup_hf_endpoint()
         self._setup_microphone()
     
-    def _setup_openai_client(self):
-        """Setup OpenAI client for Whisper API"""
+    def _setup_hf_endpoint(self):
+        """Setup Hugging Face Inference Endpoint for Whisper"""
         try:
-            logger.info("Setting up OpenAI Whisper API client...")
+            logger.info("Setting up Hugging Face Inference Endpoint...")
             
-            if not Config.OPENAI_API_KEY:
-                raise ValueError("OpenAI API key not found in configuration")
+            if not Config.HF_API_TOKEN:
+                raise ValueError("Hugging Face API token not found in configuration")
             
-            self.openai_client = OpenAI(api_key=Config.OPENAI_API_KEY)
+            # Your deployed endpoint URL (replace with your actual endpoint)
+            self.hf_endpoint_url = Config.HF_ENDPOINT_URL
+            self.hf_headers = {
+                "Authorization": f"Bearer {Config.HF_API_TOKEN}",
+                "Content-Type": "audio/wav"
+            }
             
-            # Disable HTTP logging after OpenAI client is created
-            import logging
-            logging.getLogger('httpx').disabled = True
-            logging.getLogger('httpcore').disabled = True
-            
-            logger.info("✅ OpenAI Whisper API client setup successful")
+            logger.info("✅ Hugging Face Inference Endpoint setup successful")
             
         except Exception as e:
-            logger.error(f"Failed to setup OpenAI client: {e}")
+            logger.error(f"Failed to setup HF endpoint: {e}")
             raise
     
     def _setup_microphone(self):
@@ -116,7 +116,7 @@ class VoiceRecognition:
             self.listen_thread = threading.Thread(target=self._process_audio_loop, daemon=True)
             self.listen_thread.start()
             
-            logger.info("🎤 Voice recognition started with OpenAI Whisper API")
+            logger.info("🎤 Voice recognition started with Hugging Face Inference Endpoint")
             
         except Exception as e:
             logger.error(f"Failed to start voice recognition: {e}")
@@ -149,10 +149,10 @@ class VoiceRecognition:
         
         audio_buffer = []
         silence_threshold = 1000  # Higher threshold to reduce false triggers
-        min_audio_length = self.sample_rate * 2  # 2 seconds minimum (longer to avoid short sounds)
+        min_audio_length = self.sample_rate * 2  # 2 seconds minimum
         max_audio_length = self.sample_rate * 8  # 8 seconds maximum
         silence_duration = 0
-        max_silence = self.sample_rate * 3  # 3 seconds of silence to trigger processing (longer delay)
+        max_silence = self.sample_rate * 3  # 3 seconds of silence to trigger processing
         
         while self.is_listening:
             try:
@@ -198,7 +198,7 @@ class VoiceRecognition:
                 time.sleep(0.1)
     
     def _transcribe_audio(self, audio_chunks):
-        """Transcribe audio using OpenAI Whisper API"""
+        """Transcribe audio using Hugging Face Inference Endpoint"""
         try:
             # Combine audio chunks
             audio_data = b''.join(audio_chunks)
@@ -210,50 +210,52 @@ class VoiceRecognition:
             
             logger.debug(f"Transcribing audio of length: {len(audio_array)/self.sample_rate:.2f} seconds")
             
-            # Create a temporary WAV file for the API
-            with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as temp_file:
-                # Write WAV file
-                with wave.open(temp_file.name, 'wb') as wav_file:
-                    wav_file.setnchannels(self.channels)
-                    wav_file.setsampwidth(self.audio.get_sample_size(self.format))
-                    wav_file.setframerate(self.sample_rate)
-                    wav_file.writeframes(audio_data)
-                
-                # Transcribe with OpenAI Whisper API
-                with open(temp_file.name, 'rb') as audio_file:
-                    transcript = self.openai_client.audio.transcriptions.create(
-                        model="whisper-1",
-                        file=audio_file,
-                        language="en"
-                    )
-                
-                # Clean up temp file
-                os.unlink(temp_file.name)
+            # Create WAV file in memory
+            wav_buffer = io.BytesIO()
+            with wave.open(wav_buffer, 'wb') as wav_file:
+                wav_file.setnchannels(self.channels)
+                wav_file.setsampwidth(self.audio.get_sample_size(self.format))
+                wav_file.setframerate(self.sample_rate)
+                wav_file.writeframes(audio_data)
             
-            text = transcript.text.strip().lower()
+            wav_buffer.seek(0)
             
-            if text:
-                logger.debug(f"Whisper API transcription: {text}")
+            # Send to Hugging Face Inference Endpoint
+            response = requests.post(
+                self.hf_endpoint_url,
+                headers=self.hf_headers,
+                data=wav_buffer.getvalue(),
+                timeout=30
+            )
+            
+            if response.status_code == 200:
+                result = response.json()
+                text = result.get('text', '').strip().lower()
                 
-                # Check if the activation keyword is present
-                if Config.VOICE_ACTIVATION_KEYWORD in text:
-                    # Extract command after the activation keyword
-                    keyword_index = text.find(Config.VOICE_ACTIVATION_KEYWORD)
-                    command = text[keyword_index + len(Config.VOICE_ACTIVATION_KEYWORD):].strip()
+                if text:
+                    logger.debug(f"HF Whisper transcription: {text}")
                     
-                    if command:
-                        logger.info(f"🎯 Voice command detected: {command}")
-                        self.command_callback(command)
-                    else:
-                        logger.debug("Activation keyword detected but no command found")
+                    # Check if the activation keyword is present
+                    if Config.VOICE_ACTIVATION_KEYWORD in text:
+                        # Extract command after the activation keyword
+                        keyword_index = text.find(Config.VOICE_ACTIVATION_KEYWORD)
+                        command = text[keyword_index + len(Config.VOICE_ACTIVATION_KEYWORD):].strip()
+                        
+                        if command:
+                            logger.info(f"🎯 Voice command detected: {command}")
+                            self.command_callback(command)
+                        else:
+                            logger.debug("Activation keyword detected but no command found")
+            else:
+                logger.error(f"HF Endpoint error: {response.status_code} - {response.text}")
             
         except Exception as e:
-            logger.error(f"Error transcribing audio with OpenAI API: {e}")
+            logger.error(f"Error transcribing audio with HF endpoint: {e}")
     
     def test_microphone(self):
-        """Test microphone functionality with OpenAI Whisper API"""
+        """Test microphone functionality with Hugging Face Inference Endpoint"""
         try:
-            logger.info("Testing microphone with OpenAI Whisper API...")
+            logger.info("Testing microphone with Hugging Face Inference Endpoint...")
             logger.info("Speak for 3 seconds after the beep...")
             
             # Record test audio
@@ -278,29 +280,33 @@ class VoiceRecognition:
             # Combine audio data
             combined_audio = b''.join(audio_data)
             
-            # Create temporary WAV file
-            with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as temp_file:
-                with wave.open(temp_file.name, 'wb') as wav_file:
-                    wav_file.setnchannels(self.channels)
-                    wav_file.setsampwidth(self.audio.get_sample_size(self.format))
-                    wav_file.setframerate(self.sample_rate)
-                    wav_file.writeframes(combined_audio)
-                
-                # Transcribe with OpenAI API
-                logger.info("Transcribing with OpenAI Whisper API...")
-                with open(temp_file.name, 'rb') as audio_file:
-                    transcript = self.openai_client.audio.transcriptions.create(
-                        model="whisper-1",
-                        file=audio_file,
-                        language="en"
-                    )
-                
-                # Clean up temp file
-                os.unlink(temp_file.name)
+            # Create WAV file in memory
+            wav_buffer = io.BytesIO()
+            with wave.open(wav_buffer, 'wb') as wav_file:
+                wav_file.setnchannels(self.channels)
+                wav_file.setsampwidth(self.audio.get_sample_size(self.format))
+                wav_file.setframerate(self.sample_rate)
+                wav_file.writeframes(combined_audio)
             
-            text = transcript.text.strip()
-            logger.info(f"✅ Microphone test successful. You said: '{text}'")
-            return True
+            wav_buffer.seek(0)
+            
+            # Transcribe with HF Endpoint
+            logger.info("Transcribing with Hugging Face Inference Endpoint...")
+            response = requests.post(
+                self.hf_endpoint_url,
+                headers=self.hf_headers,
+                data=wav_buffer.getvalue(),
+                timeout=30
+            )
+            
+            if response.status_code == 200:
+                result = response.json()
+                text = result.get('text', '').strip()
+                logger.info(f"✅ Microphone test successful. You said: '{text}'")
+                return True
+            else:
+                logger.error(f"❌ Microphone test failed: {response.status_code} - {response.text}")
+                return False
             
         except Exception as e:
             logger.error(f"❌ Microphone test failed: {e}")
