@@ -24,7 +24,6 @@ class Config:
     MICROPHONE_INDEX = int(os.getenv('MICROPHONE_INDEX', 0))
     VOICE_TIMEOUT = int(os.getenv('VOICE_TIMEOUT', 5))
     VOICE_PHRASE_TIMEOUT = int(os.getenv('VOICE_PHRASE_TIMEOUT', 2))
-    USE_LOCAL_WHISPER = os.getenv('USE_LOCAL_WHISPER', 'false').lower() == 'true'
     
     # Moderation Settings
     DEFAULT_BAN_DURATION = int(os.getenv('DEFAULT_BAN_DURATION', 600))  # 10 minutes

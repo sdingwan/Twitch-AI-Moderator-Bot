@@ -9,12 +9,8 @@ import wave
 import tempfile
 import os
 import requests
-import warnings
 from typing import Optional, Callable
 from config import Config
-
-# Suppress FutureWarnings from server-side transformers library
-warnings.filterwarnings("ignore", category=FutureWarning, module="transformers")
 
 logger = logging.getLogger(__name__)
 
