@@ -220,6 +220,7 @@ async def main():
             print("  'Hey Brian, clear chat'")
             print("  'Hey Brian, slow mode 30'")
             print("  'Hey Brian, followers only mode'")
+            print("  'Hey Brian, subscribers only mode'")
             print("\nFeatures:")
             print("  🎤 Cloud-hosted Whisper Large V3 for fast and accurate voice recognition")
             print("  🚀 Twitch Helix API for reliable moderation")

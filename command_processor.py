@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class ModerationCommand:
-    action: str  # 'ban', 'timeout', 'unban', 'clear', 'slow', 'followers_only', etc.
+    action: str  # 'ban', 'timeout', 'unban', 'clear', 'slow', 'followers_only', 'subscribers_only', etc.
     username: Optional[str] = None
     duration: Optional[int] = None  # in seconds
     reason: Optional[str] = None
@@ -23,7 +23,15 @@ class CommandProcessor:
             self.openai_client = OpenAI(api_key=Config.OPENAI_API_KEY)
         
         # Predefined patterns for common commands
+        # NOTE: Order matters! More specific patterns (like 'unban') should come before general ones (like 'ban')
         self.command_patterns = {
+            'unban': [
+                r'unban\s+(\w+)',
+                r'un\s*ban\s+(\w+)',
+                r'remove\s+ban\s+(?:from\s+)?(\w+)',
+                r'lift\s+ban\s+(?:from\s+)?(\w+)',
+                r'pardon\s+(\w+)'
+            ],
             'ban': [
                 r'ban\s+(\w+)(?:\s+for\s+(\d+)\s*(minutes?|mins?|hours?|hrs?|seconds?|secs?))?',
                 r'ban\s+(\w+)(?:\s+(\d+)\s*(minutes?|mins?|hours?|hrs?|seconds?|secs?))?',
@@ -34,11 +42,6 @@ class CommandProcessor:
                 r'timeout\s+(\w+)(?:\s+for\s+(\d+)\s*(minutes?|mins?|hours?|hrs?|seconds?|secs?))?',
                 r'time\s*out\s+(\w+)(?:\s+(\d+)\s*(minutes?|mins?|hours?|hrs?|seconds?|secs?))?',
                 r'mute\s+(\w+)(?:\s+for\s+(\d+)\s*(minutes?|mins?|hours?|hrs?|seconds?|secs?))?'
-            ],
-            'unban': [
-                r'unban\s+(\w+)',
-                r'un\s*ban\s+(\w+)',
-                r'remove\s+ban\s+(\w+)'
             ],
             'clear': [
                 r'clear\s+chat',
@@ -54,6 +57,13 @@ class CommandProcessor:
                 r'followers?\s+only\s+mode',
                 r'enable\s+followers?\s+only',
                 r'followers?\s+only\s+(\d+)\s*(minutes?|mins?|hours?|hrs?|days?)'
+            ],
+            'subscribers_only': [
+                r'subscribers?\s+only\s+mode',
+                r'enable\s+subscribers?\s+only',
+                r'subs?\s+only\s+mode',
+                r'subscriber\s+mode',
+                r'sub\s+mode'
             ]
         }
         
@@ -168,15 +178,19 @@ class CommandProcessor:
             Command: "{command_text}"
             
             Respond with a JSON object containing:
-            - action: one of [ban, timeout, unban, clear, slow, followers_only, unknown]
+            - action: one of [ban, timeout, unban, clear, slow, followers_only, subscribers_only, unknown]
             - username: target username (if applicable)
             - duration: duration in seconds (if applicable)
             - reason: reason for action (if mentioned)
             
             Examples:
             "ban johndoe for 12 minutes" -> {{"action": "ban", "username": "johndoe", "duration": 720}}
+            "unban johndoe" -> {{"action": "unban", "username": "johndoe"}}
             "timeout user123 for spam" -> {{"action": "timeout", "username": "user123", "duration": 600, "reason": "spam"}}
             "clear the chat" -> {{"action": "clear"}}
+            "subscribers only mode" -> {{"action": "subscribers_only"}}
+            
+            IMPORTANT: Pay careful attention to "unban" vs "ban" - they are opposite actions!
             
             If the command is unclear or not a moderation action, return {{"action": "unknown"}}.
             """

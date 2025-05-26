@@ -43,6 +43,10 @@ python main.py              # Start bot
 ```
 
 ## 6. Use Voice Commands
-Say: `"Hey Brian, ban username123 for 10 minutes"`
+Examples:
+- `"Hey Brian, ban username123 for 10 minutes"`
+- `"Hey Brian, unban username123"`
+- `"Hey Brian, subscribers only mode"`
+- `"Hey Brian, clear chat"`
 
 That's it! 🎉 

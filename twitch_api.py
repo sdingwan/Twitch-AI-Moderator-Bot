@@ -242,8 +242,9 @@ class TwitchHelixAPI:
             return False
     
     async def update_chat_settings(self, slow_mode_duration: Optional[int] = None, 
-                                 follower_only_duration: Optional[int] = None) -> bool:
-        """Update chat settings (slow mode, follower-only mode, etc.)"""
+                                 follower_only_duration: Optional[int] = None,
+                                 subscriber_only: Optional[bool] = None) -> bool:
+        """Update chat settings (slow mode, follower-only mode, subscriber-only mode, etc.)"""
         try:
             if not await self.rate_limiter.can_make_request():
                 logger.warning("Rate limit exceeded for chat settings request")
@@ -265,6 +266,9 @@ class TwitchHelixAPI:
             if follower_only_duration is not None:
                 settings_data['follower_mode'] = True
                 settings_data['follower_mode_duration'] = follower_only_duration // 60  # Convert to minutes
+            
+            if subscriber_only is not None:
+                settings_data['subscriber_mode'] = subscriber_only
             
             params = {
                 'broadcaster_id': self.broadcaster_id,

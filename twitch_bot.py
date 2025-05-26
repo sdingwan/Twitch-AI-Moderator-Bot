@@ -84,6 +84,10 @@ class TwitchModeratorBot:
                 if success:
                     duration_text = f"{cmd.duration // 60} minutes minimum follow time" if cmd.duration else "enabled"
                     await self.api.send_chat_message(f"👥 Followers-only mode {duration_text}")
+            elif cmd.action == 'subscribers_only':
+                success = await self.api.update_chat_settings(subscriber_only=True)
+                if success:
+                    await self.api.send_chat_message(f"💎 Subscribers-only mode enabled")
             else:
                 logger.error(f"Unknown moderation action: {cmd.action}")
                 return False

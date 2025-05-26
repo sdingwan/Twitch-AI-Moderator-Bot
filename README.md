@@ -16,6 +16,8 @@ A simple Twitch moderation bot that responds to voice commands using cloud-hoste
 - `"Hey Brian, unban username123"`
 - `"Hey Brian, clear chat"`
 - `"Hey Brian, slow mode 30"`
+- `"Hey Brian, followers only mode"`
+- `"Hey Brian, subscribers only mode"`
 
 ## 🚀 Quick Start
 
