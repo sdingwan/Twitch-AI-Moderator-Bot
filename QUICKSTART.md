@@ -1,11 +1,11 @@
 # 🚀 Quick Start Guide
 
-Get your AI Moderator Bot running in 5 minutes!
+Get your Twitch AI Moderator Bot running in 5 minutes!
 
 ## 1. Install
 ```bash
-git clone https://github.com/yourusername/AI-Moderator-Bot.git
-cd AI-Moderator-Bot
+git clone https://github.com/yourusername/Twitch-AI-Moderator-Bot.git
+cd Twitch-AI-Moderator-Bot
 pip install -r requirements.txt
 ```
 

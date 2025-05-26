@@ -1,6 +1,6 @@
 # 🚀 GitHub Upload Guide
 
-Your AI Moderator Bot is ready for GitHub! All private information is protected.
+Your Twitch AI Moderator Bot is ready for GitHub! All private information is protected.
 
 ## ✅ Privacy Protection
 
@@ -21,7 +21,7 @@ Your AI Moderator Bot is ready for GitHub! All private information is protected.
 ### 1. Create GitHub Repository
 1. Go to [GitHub.com](https://github.com)
 2. Click "New repository"
-3. Name it: `AI-Moderator-Bot`
+3. Name it: `Twitch-AI-Moderator-Bot`
 4. Make it **Public** (safe - no private data included)
 5. Don't initialize with README (we already have one)
 6. Click "Create repository"
@@ -29,7 +29,7 @@ Your AI Moderator Bot is ready for GitHub! All private information is protected.
 ### 2. Upload Your Code
 ```bash
 # Add GitHub as remote (replace 'yourusername' with your GitHub username)
-git remote add origin https://github.com/yourusername/AI-Moderator-Bot.git
+git remote add origin https://github.com/yourusername/Twitch-AI-Moderator-Bot.git
 
 # Push to GitHub
 git branch -M main

@@ -1,7 +1,7 @@
 #!/bin/bash
-# Simple installer for AI Moderator Bot
+# Simple installer for Twitch AI Moderator Bot
 
-echo "🎤 Installing AI Moderator Bot..."
+echo "🎤 Installing Twitch AI Moderator Bot..."
 
 # Check Python
 if ! command -v python3 &> /dev/null; then

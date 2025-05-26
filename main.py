@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-AI Moderator Bot - Voice Command Twitch Moderation
+Twitch AI Moderator Bot - Voice Command Twitch Moderation
 A simple Twitch chat moderation bot that responds to voice commands using cloud-hosted Whisper Large V3
 """
 
@@ -39,7 +39,7 @@ logger = logging.getLogger(__name__)
 
 class AIModeratorBot:
     def __init__(self):
-        """Initialize the AI Moderator Bot"""
+        """Initialize the Twitch AI Moderator Bot"""
         self.voice_recognition = None
         self.command_processor = None
         self.twitch_bot = None
@@ -77,13 +77,13 @@ class AIModeratorBot:
             return False
     
     async def start(self):
-        """Start the AI Moderator Bot"""
+        """Start the Twitch AI Moderator Bot"""
         if not await self.initialize():
             logger.error("Failed to initialize bot components")
             return False
         
         try:
-            logger.info("Starting AI Moderator Bot...")
+            logger.info("Starting Twitch AI Moderator Bot...")
             self.is_running = True
             
             # Store reference to the current event loop
@@ -100,7 +100,7 @@ class AIModeratorBot:
             # Send startup message to chat
             await self.twitch_bot.send_status_message()
             
-            logger.info("🎤 AI Moderator Bot is now running!")
+            logger.info("🎤 Twitch AI Moderator Bot is now running!")
             logger.info("🎯 Voice commands are active. Say 'Hey Brian' followed by your command.")
             logger.info("📝 Example: 'Hey Brian, ban username123 for 10 minutes'")
             logger.info("🔗 Using Twitch Helix API with cloud-hosted Whisper Large V3 for voice recognition")
@@ -116,8 +116,8 @@ class AIModeratorBot:
             return False
     
     async def stop(self):
-        """Stop the AI Moderator Bot"""
-        logger.info("Stopping AI Moderator Bot...")
+        """Stop the Twitch AI Moderator Bot"""
+        logger.info("Stopping Twitch AI Moderator Bot...")
         self.is_running = False
         
         # Stop voice recognition
@@ -128,7 +128,7 @@ class AIModeratorBot:
         if self.twitch_bot:
             await self.twitch_bot.close()
         
-        logger.info("AI Moderator Bot stopped")
+        logger.info("Twitch AI Moderator Bot stopped")
     
     def _on_voice_command(self, command_text: str):
         """Handle voice commands"""
@@ -206,7 +206,7 @@ async def main():
             bot.list_microphones()
             return
         elif sys.argv[1] == '--help':
-            print("AI Moderator Bot - Voice Command Twitch Moderation")
+            print("Twitch AI Moderator Bot - Voice Command Twitch Moderation")
             print("Powered by cloud-hosted Whisper Large V3 + Twitch Helix API")
             print("\nUsage:")
             print("  python main.py              - Start the bot")

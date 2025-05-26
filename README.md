@@ -1,4 +1,4 @@
-# 🎤 AI Moderator Bot
+# 🎤 Twitch AI Moderator Bot
 
 A simple Twitch moderation bot that responds to voice commands using cloud-hosted Whisper Large V3.
 
@@ -23,8 +23,8 @@ A simple Twitch moderation bot that responds to voice commands using cloud-hoste
 
 ### 1. Install
 ```bash
-git clone https://github.com/yourusername/AI-Moderator-Bot.git
-cd AI-Moderator-Bot
+git clone https://github.com/yourusername/Twitch-AI-Moderator-Bot.git
+cd Twitch-AI-Moderator-Bot
 pip install -r requirements.txt
 ```
 
@@ -91,7 +91,7 @@ python main.py --help       # Show help
 ## 📁 Project Structure
 
 ```
-AI-Moderator-Bot/
+Twitch-AI-Moderator-Bot/
 ├── main.py              # Main bot application
 ├── voice_recognition_hf.py # Voice processing with cloud-hosted Whisper Large V3
 ├── command_processor.py # Command parsing and validation
