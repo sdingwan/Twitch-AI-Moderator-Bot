@@ -15,19 +15,25 @@ class ModerationCommand:
     duration: Optional[int] = None  # in seconds
     reason: Optional[str] = None
     additional_params: Optional[Dict] = None
+    original_username: Optional[str] = None  # Store the original spoken username
 
 class CommandProcessor:
-    def __init__(self):
-        """Initialize the command processor with AI capabilities"""
+    def __init__(self, phonetic_helper=None):
+        """Initialize the command processor with AI capabilities and optional phonetic matching"""
         self.openai_client = None
+        self.phonetic_helper = phonetic_helper
         if Config.OPENAI_API_KEY:
             self.openai_client = OpenAI(api_key=Config.OPENAI_API_KEY)
         else:
             logger.error("OpenAI API key not found. Command processing will not work.")
     
+    def set_phonetic_helper(self, phonetic_helper):
+        """Set the phonetic helper for username resolution"""
+        self.phonetic_helper = phonetic_helper
+    
     def process_command(self, command_text: str) -> Optional[ModerationCommand]:
         """
-        Process a voice command using OpenAI API
+        Process a voice command using OpenAI API and phonetic username matching
         
         Args:
             command_text: The recognized voice command text
@@ -44,12 +50,39 @@ class CommandProcessor:
         
         moderation_cmd = self._ai_process_command(command_text)
         
+        if moderation_cmd and moderation_cmd.username:
+            # Try to resolve the username using phonetic matching
+            original_username = moderation_cmd.username
+            resolved_username = self._resolve_username(moderation_cmd.username)
+            
+            if resolved_username:
+                moderation_cmd.username = resolved_username
+                moderation_cmd.original_username = original_username
+                logger.info(f"Username resolved: '{original_username}' -> '{resolved_username}'")
+            else:
+                logger.warning(f"Could not resolve username: '{original_username}'")
+                # Keep the original username but mark it as unresolved
+                moderation_cmd.original_username = original_username
+        
         if moderation_cmd:
             logger.info(f"Command processed: {moderation_cmd}")
             return moderation_cmd
         else:
             logger.warning(f"Could not process command: {command_text}")
             return None
+    
+    def _resolve_username(self, spoken_username: str) -> Optional[str]:
+        """Resolve a spoken username using phonetic matching"""
+        if not self.phonetic_helper:
+            logger.debug("No phonetic helper available, using original username")
+            return spoken_username
+        
+        try:
+            resolved = self.phonetic_helper.resolve_username(spoken_username)
+            return resolved if resolved else spoken_username
+        except Exception as e:
+            logger.error(f"Error resolving username '{spoken_username}': {e}")
+            return spoken_username
     
     def _ai_process_command(self, command_text: str) -> Optional[ModerationCommand]:
         """Use OpenAI to process all commands"""

@@ -48,6 +48,7 @@ from config import Config
 from voice_recognition_hf import VoiceRecognitionHF
 from command_processor import CommandProcessor, ModerationCommand
 from twitch_bot import TwitchModeratorBot
+from username_logger import UsernameLogger, PhoneticModerationHelper
 
 logger = logging.getLogger(__name__)
 
@@ -57,8 +58,11 @@ class AIModeratorBot:
         self.voice_recognition = None
         self.command_processor = None
         self.twitch_bot = None
+        self.username_logger = None
+        self.phonetic_helper = None
         self.is_running = False
         self.bot_task = None
+        self.username_logger_task = None
         self.event_loop = None  # Store reference to the main event loop
         
         # Setup signal handlers for graceful shutdown
@@ -80,9 +84,17 @@ class AIModeratorBot:
             
             logger.info("Basic configuration validated successfully")
             
-            # Initialize command processor
-            self.command_processor = CommandProcessor()
-            logger.info("Command processor initialized")
+            # Initialize username logger for phonetic matching
+            self.username_logger = UsernameLogger(max_usernames=30, update_interval=2)
+            logger.info("Username logger initialized")
+            
+            # Initialize phonetic helper
+            self.phonetic_helper = PhoneticModerationHelper(self.username_logger)
+            logger.info("Phonetic moderation helper initialized")
+            
+            # Initialize command processor with phonetic helper
+            self.command_processor = CommandProcessor(phonetic_helper=self.phonetic_helper)
+            logger.info("Command processor initialized with phonetic matching")
             
             # Initialize Twitch bot
             self.twitch_bot = TwitchModeratorBot(command_callback=self._on_command_executed)
@@ -119,6 +131,12 @@ class AIModeratorBot:
                 print("❌ Failed to connect to Twitch API")
                 return False
             
+            # Start username logger for chat monitoring
+            if self.username_logger:
+                self.username_logger_task = asyncio.create_task(self.username_logger.start_monitoring())
+                logger.info("Username logger started")
+                print("📝 Chat username monitoring started")
+            
             # Start voice recognition
             self.voice_recognition.start_listening()
             
@@ -126,7 +144,11 @@ class AIModeratorBot:
             await self.twitch_bot.send_status_message()
             
             print(f"🎤 Voice commands active for channel: {Config.TWITCH_CHANNEL}")
+            print("📝 Phonetic username matching enabled")
             print("Say 'Hey Brian' followed by your command.")
+            print("Examples:")
+            print("  • 'Hey Brian, ban viking king' (will match V1king_k1ng)")
+            print("  • 'Hey Brian, timeout roil navy' (will match RoilNavy)")
             print("=" * 50)
             
             # Keep the main thread alive
@@ -145,6 +167,17 @@ class AIModeratorBot:
         print("\n🛑 Stopping bot...")
         logger.info("Stopping Twitch AI Moderator Bot...")
         self.is_running = False
+        
+        # Stop username logger
+        if self.username_logger:
+            self.username_logger.stop_monitoring()
+            if self.username_logger_task:
+                self.username_logger_task.cancel()
+                try:
+                    await self.username_logger_task
+                except asyncio.CancelledError:
+                    pass
+            logger.info("Username logger stopped")
         
         # Stop voice recognition
         if self.voice_recognition:
@@ -174,6 +207,10 @@ class AIModeratorBot:
         moderation_cmd = self.command_processor.process_command(actual_command)
         
         if moderation_cmd:
+            # Show phonetic matching result if username was resolved
+            if moderation_cmd.original_username and moderation_cmd.username != moderation_cmd.original_username:
+                print(f"🔍 Phonetic match: '{moderation_cmd.original_username}' → '{moderation_cmd.username}'")
+            
             # Validate the command
             logger.debug(f"Validating command: {moderation_cmd}")
             is_valid, error_msg = self.command_processor.validate_command(moderation_cmd)

@@ -6,6 +6,8 @@ A simple Twitch moderation bot that responds to voice commands using cloud-hoste
 
 - 🎤 **Voice Commands**: Say "Hey Brian" + your command
 - 🚀 **Instant Moderation**: Ban, timeout, unban users with voice
+- 🔍 **Smart Username Matching**: Phonetic matching for usernames with numbers/special characters
+- 📝 **Chat Monitoring**: Automatically logs recent chat usernames for better matching
 - ☁️ **Fast & Accurate**: Uses cloud-hosted Whisper Large V3 (no heavy local models)
 - 📝 **Clean Logs**: No spam, just important information
 
@@ -18,6 +20,22 @@ A simple Twitch moderation bot that responds to voice commands using cloud-hoste
 - `"Hey Brian, slow mode 30"`
 - `"Hey Brian, followers only mode"`
 - `"Hey Brian, subscribers only mode"`
+
+## 🔍 Smart Username Matching
+
+The bot now includes advanced phonetic matching to handle usernames with numbers and special characters:
+
+**Examples:**
+- Say `"Hey Brian, ban viking king"` → Matches `V1king_k1ng`
+- Say `"Hey Brian, timeout roil navy"` → Matches `RoilNavy`
+- Say `"Hey Brian, ban test user"` → Matches `TestUser123`
+
+**How it works:**
+- Monitors the last 30 chat messages automatically
+- Uses multiple phonetic algorithms (Soundex, Metaphone, Jaro-Winkler)
+- Handles leet speak (1→i, 3→e, 4→a, etc.)
+- Updates username log every 2 seconds
+- Shows phonetic matches in real-time
 
 ## 🚀 Quick Start
 
@@ -38,7 +56,7 @@ cp env.example .env
 Your `.env` file should contain:
 ```env
 # Twitch Settings
-TWITCH_TOKEN=oauth:your_token_here
+TWITCH_TOKEN=your_token_here
 TWITCH_CLIENT_ID=your_client_id
 TWITCH_CLIENT_SECRET=your_client_secret
 TWITCH_CHANNEL=your_channel_name
@@ -92,13 +110,15 @@ python main.py --help       # Show help
 
 ```
 Twitch-AI-Moderator-Bot/
-├── main.py              # Main bot application
+├── main.py                 # Main bot application
 ├── voice_recognition_hf.py # Voice processing with cloud-hosted Whisper Large V3
-├── command_processor.py # Command parsing and validation
-├── twitch_api.py        # Twitch Helix API client
-├── twitch_bot.py        # Twitch moderation logic
-├── config.py            # Configuration management
-└── requirements.txt     # Dependencies
+├── command_processor.py    # Command parsing and validation
+├── username_logger.py      # Chat monitoring and phonetic username matching
+├── twitch_api.py           # Twitch Helix API client
+├── twitch_bot.py           # Twitch moderation logic
+├── config.py               # Configuration management
+├── chat_usernames.log      # Recent chat usernames (auto-generated)
+└── requirements.txt        # Dependencies
 ```
 
 ## 🔧 Requirements
@@ -111,9 +131,11 @@ Twitch-AI-Moderator-Bot/
 ## 📝 Notes
 
 - The bot uses cloud-hosted Whisper Large V3 for fast, accurate voice recognition
+- Chat usernames are automatically monitored and logged for phonetic matching
 - All moderation actions are logged to `moderator_bot.log`
 - HTTP request logs are automatically suppressed for clean output
 - Voice activation keyword can be customized in the `.env` file
+- Phonetic matching threshold can be adjusted in the code (default: 0.5)
 
 ## 🆘 Troubleshooting
 
@@ -127,6 +149,12 @@ python main.py --list-mics  # Find your microphone index
 - Check your Hugging Face API token and endpoint URL
 - Test with: `python main.py --test-mic`
 - Speak clearly and include "Hey Brian" before commands
+
+**Username not being matched?**
+- Make sure the user has chatted recently (last 30 messages)
+- Try speaking the username more clearly
+- Check `chat_usernames.log` to see logged usernames
+- The bot shows phonetic matches in real-time
 
 **Twitch commands failing?**
 - Verify your OAuth token has the correct scopes
