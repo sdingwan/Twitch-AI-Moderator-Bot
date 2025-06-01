@@ -9,7 +9,7 @@ class Config:
     TWITCH_TOKEN = os.getenv('TWITCH_TOKEN')
     TWITCH_CLIENT_ID = os.getenv('TWITCH_CLIENT_ID')
     TWITCH_CLIENT_SECRET = os.getenv('TWITCH_CLIENT_SECRET')
-    TWITCH_CHANNEL = os.getenv('TWITCH_CHANNEL')
+    TWITCH_CHANNEL = None  # Will be set dynamically
     TWITCH_BOT_USERNAME = os.getenv('TWITCH_BOT_USERNAME')
     
     # OpenAI Configuration
@@ -35,11 +35,18 @@ class Config:
     JOIN_RATE_LIMIT = 20     # joins per 10 seconds
     
     @classmethod
+    def set_twitch_channel(cls, channel: str):
+        """Set the Twitch channel dynamically"""
+        cls.TWITCH_CHANNEL = channel.lower().strip()
+        if cls.TWITCH_CHANNEL.startswith('#'):
+            cls.TWITCH_CHANNEL = cls.TWITCH_CHANNEL[1:]  # Remove # if present
+    
+    @classmethod
     def validate(cls):
         """Validate that all required configuration is present"""
         required_vars = [
             'TWITCH_TOKEN', 'TWITCH_CLIENT_ID', 'TWITCH_CLIENT_SECRET',
-            'TWITCH_CHANNEL', 'TWITCH_BOT_USERNAME'
+            'TWITCH_BOT_USERNAME'
         ]
         
         missing_vars = []
@@ -49,5 +56,9 @@ class Config:
         
         if missing_vars:
             raise ValueError(f"Missing required environment variables: {', '.join(missing_vars)}")
+        
+        # Check if channel is set
+        if not cls.TWITCH_CHANNEL:
+            raise ValueError("Twitch channel not set. Please specify a channel.")
         
         return True 

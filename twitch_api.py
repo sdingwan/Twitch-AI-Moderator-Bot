@@ -243,8 +243,9 @@ class TwitchHelixAPI:
     
     async def update_chat_settings(self, slow_mode_duration: Optional[int] = None, 
                                  follower_only_duration: Optional[int] = None,
-                                 subscriber_only: Optional[bool] = None) -> bool:
-        """Update chat settings (slow mode, follower-only mode, subscriber-only mode, etc.)"""
+                                 subscriber_only: Optional[bool] = None,
+                                 emote_only: Optional[bool] = None) -> bool:
+        """Update chat settings (slow mode, follower-only mode, subscriber-only mode, emote-only mode, etc.)"""
         try:
             if not await self.rate_limiter.can_make_request():
                 logger.warning("Rate limit exceeded for chat settings request")
@@ -260,15 +261,24 @@ class TwitchHelixAPI:
             settings_data = {}
             
             if slow_mode_duration is not None:
-                settings_data['slow_mode'] = True
-                settings_data['slow_mode_wait_time'] = slow_mode_duration
+                if slow_mode_duration == 0:
+                    settings_data['slow_mode'] = False
+                else:
+                    settings_data['slow_mode'] = True
+                    settings_data['slow_mode_wait_time'] = slow_mode_duration
             
             if follower_only_duration is not None:
-                settings_data['follower_mode'] = True
-                settings_data['follower_mode_duration'] = follower_only_duration // 60  # Convert to minutes
+                if follower_only_duration == 0:
+                    settings_data['follower_mode'] = False
+                else:
+                    settings_data['follower_mode'] = True
+                    settings_data['follower_mode_duration'] = follower_only_duration // 60  # Convert to minutes
             
             if subscriber_only is not None:
                 settings_data['subscriber_mode'] = subscriber_only
+            
+            if emote_only is not None:
+                settings_data['emote_mode'] = emote_only
             
             params = {
                 'broadcaster_id': self.broadcaster_id,

@@ -71,6 +71,10 @@ class TwitchModeratorBot:
                 success = await self.api.unban_user(cmd.username)
                 if success:
                     await self.api.send_chat_message(f"✅ {cmd.username} has been unbanned")
+            elif cmd.action == 'untimeout':
+                success = await self.api.unban_user(cmd.username)
+                if success:
+                    await self.api.send_chat_message(f"✅ {cmd.username} timeout has been removed")
             elif cmd.action == 'clear':
                 success = await self.api.clear_chat()
                 if success:
@@ -79,15 +83,46 @@ class TwitchModeratorBot:
                 success = await self.api.update_chat_settings(slow_mode_duration=cmd.duration)
                 if success:
                     await self.api.send_chat_message(f"🐌 Slow mode enabled: {cmd.duration} seconds between messages")
+            elif cmd.action == 'slow_off':
+                success = await self.api.update_chat_settings(slow_mode_duration=0)
+                if success:
+                    await self.api.send_chat_message("🐌 Slow mode disabled")
             elif cmd.action == 'followers_only':
                 success = await self.api.update_chat_settings(follower_only_duration=cmd.duration)
                 if success:
                     duration_text = f"{cmd.duration // 60} minutes minimum follow time" if cmd.duration else "enabled"
                     await self.api.send_chat_message(f"👥 Followers-only mode {duration_text}")
+            elif cmd.action == 'followers_off':
+                success = await self.api.update_chat_settings(follower_only_duration=0)
+                if success:
+                    await self.api.send_chat_message("👥 Followers-only mode disabled")
             elif cmd.action == 'subscribers_only':
                 success = await self.api.update_chat_settings(subscriber_only=True)
                 if success:
                     await self.api.send_chat_message(f"💎 Subscribers-only mode enabled")
+            elif cmd.action == 'subscribers_off':
+                success = await self.api.update_chat_settings(subscriber_only=False)
+                if success:
+                    await self.api.send_chat_message("💎 Subscribers-only mode disabled")
+            elif cmd.action == 'emote_only':
+                success = await self.api.update_chat_settings(emote_only=True)
+                if success:
+                    await self.api.send_chat_message("😀 Emote-only mode enabled")
+            elif cmd.action == 'emote_off':
+                success = await self.api.update_chat_settings(emote_only=False)
+                if success:
+                    await self.api.send_chat_message("😀 Emote-only mode disabled")
+            elif cmd.action == 'restrict':
+                # Note: Twitch doesn't have a direct "restrict" API, so we'll use a timeout with a long duration
+                # You might want to implement this differently based on your needs
+                success = await self.api.ban_user(cmd.username, "Restricted by voice command", 86400)  # 24 hour timeout
+                if success:
+                    await self.api.send_chat_message(f"🚫 {cmd.username} has been restricted (24h timeout)")
+            elif cmd.action == 'unrestrict':
+                # Remove the restriction (unban/untimeout)
+                success = await self.api.unban_user(cmd.username)
+                if success:
+                    await self.api.send_chat_message(f"✅ {cmd.username} restrictions have been removed")
             else:
                 logger.error(f"Unknown moderation action: {cmd.action}")
                 return False
@@ -156,7 +191,7 @@ class TwitchModeratorBot:
     async def send_status_message(self):
         """Send status message to chat"""
         try:
-            await self.api.send_chat_message("🤖 Twitch AI Moderator Bot is online and listening for voice commands!")
+            await self.api.send_chat_message("🤖 AI Bot is online!")
         except Exception as e:
             logger.error(f"Failed to send status message: {e}")
     
