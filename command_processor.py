@@ -68,7 +68,7 @@ class CommandProcessor:
             Rules for parsing:
             1. BANS are PERMANENT - never set duration for "ban" action, always null
             2. For "timeout" without duration: use {Config.DEFAULT_BAN_DURATION} seconds
-            3. For "followers_only" duration means minimum follow time required (e.g., "followers only 10 minutes" = must follow for 10+ minutes to chat)
+            3. For "followers_only" default duration is 1 second. Otherwise, use the duration provided.
             4. Convert time units: minutes->seconds (*60), hours->seconds (*3600), days->seconds (*86400)
             5. Clean usernames: lowercase, no spaces, alphanumeric + underscore only
             6. Pay attention to opposite actions: "unban" vs "ban", "untimeout" vs "timeout", etc.
@@ -84,30 +84,32 @@ class CommandProcessor:
             - "slow mode", "enable slow mode" -> slow
             - "disable slow mode", "turn off slow mode", "slow off" -> slow_off
             - "followers only", "follower mode" -> followers_only
-            - "disable followers only", "followers off" -> followers_off
-            - "subscribers only", "sub mode", "subs only" -> subscribers_only
-            - "disable subscribers only", "subs off" -> subscribers_off
+            - "disable followers only", "followers off", "remove followers only" -> followers_off
+            - "subscribers only", "sub mode", "subs only", "sub only" -> subscribers_only
+            - "disable subscribers only", "subs off", "sub off", "remove sub only", "remove subs only", "turn off sub only", "turn off subs only", "disable sub only", "disable sub mode" -> subscribers_off
             - "emote only", "emotes only" -> emote_only
-            - "disable emote only", "emotes off" -> emote_off
+            - "disable emote only", "emotes off", "remove emote only" -> emote_off
             - "restrict user", "put user in restricted mode" -> restrict
             - "unrestrict user", "remove restrictions" -> unrestrict
             
             Examples:
             "ban johndoe" -> {{"action": "ban", "username": "johndoe", "duration": null, "reason": null}}
-            "ban johndoe for spam" -> {{"action": "ban", "username": "johndoe", "duration": null, "reason": "spam"}}
             "permanently ban user123" -> {{"action": "ban", "username": "user123", "duration": null, "reason": null}}
             "timeout user123 for 10 minutes" -> {{"action": "timeout", "username": "user123", "duration": 600, "reason": null}}
-            "timeout spammer for spam" -> {{"action": "timeout", "username": "spammer", "duration": {Config.DEFAULT_BAN_DURATION}, "reason": "spam"}}
             "unban johndoe" -> {{"action": "unban", "username": "johndoe", "duration": null, "reason": null}}
             "untimeout user123" -> {{"action": "untimeout", "username": "user123", "duration": null, "reason": null}}
             "clear the chat" -> {{"action": "clear", "username": null, "duration": null, "reason": null}}
             "slow mode 30 seconds" -> {{"action": "slow", "username": null, "duration": 30, "reason": null}}
             "disable slow mode" -> {{"action": "slow_off", "username": null, "duration": null, "reason": null}}
             "followers only 10 minutes" -> {{"action": "followers_only", "username": null, "duration": 600, "reason": null}}
-            "followers only mode" -> {{"action": "followers_only", "username": null, "duration": null, "reason": null}}
+            "followers only mode" -> {{"action": "followers_only", "username": null, "duration": 1, "reason": null}}
             "turn off followers only" -> {{"action": "followers_off", "username": null, "duration": null, "reason": null}}
             "subscribers only" -> {{"action": "subscribers_only", "username": null, "duration": null, "reason": null}}
+            "sub only" -> {{"action": "subscribers_only", "username": null, "duration": null, "reason": null}}
+            "subs only mode" -> {{"action": "subscribers_only", "username": null, "duration": null, "reason": null}}
             "disable subs only" -> {{"action": "subscribers_off", "username": null, "duration": null, "reason": null}}
+            "remove sub only" -> {{"action": "subscribers_off", "username": null, "duration": null, "reason": null}}
+            "turn off sub only" -> {{"action": "subscribers_off", "username": null, "duration": null, "reason": null}}
             "emote only mode" -> {{"action": "emote_only", "username": null, "duration": null, "reason": null}}
             "turn off emote only" -> {{"action": "emote_off", "username": null, "duration": null, "reason": null}}
             "restrict baduser" -> {{"action": "restrict", "username": "baduser", "duration": null, "reason": null}}
@@ -120,7 +122,7 @@ class CommandProcessor:
                 model="gpt-3.5-turbo",
                 messages=[{"role": "user", "content": prompt}],
                 max_tokens=200,
-                temperature=0.1
+                temperature=0.2
             )
             
             result = response.choices[0].message.content.strip()
@@ -129,13 +131,17 @@ class CommandProcessor:
             # Parse JSON response
             try:
                 parsed = json.loads(result)
+                logger.debug(f"Parsed AI response: {parsed}")
+                
                 if parsed.get('action') != 'unknown':
-                    return ModerationCommand(
+                    cmd = ModerationCommand(
                         action=parsed.get('action'),
                         username=parsed.get('username'),
                         duration=parsed.get('duration'),
                         reason=parsed.get('reason')
                     )
+                    logger.debug(f"Created command object: {cmd}")
+                    return cmd
                 else:
                     logger.info(f"Command not recognized as moderation action: {command_text}")
                     return None
@@ -181,9 +187,17 @@ class CommandProcessor:
             return False, f"Duration not allowed for {cmd.action} action"
         
         # Validate duration limits
-        if cmd.duration:
-            if cmd.duration < 1:
-                return False, "Duration must be at least 1 second"
+        if cmd.duration is not None:
+            # For followers_only, duration 0 is valid (no minimum follow time)
+            if cmd.action == 'followers_only':
+                if cmd.duration < 0:
+                    return False, "Duration cannot be negative"
+            else:
+                # For other actions, duration must be at least 1 second
+                if cmd.duration < 1:
+                    return False, "Duration must be at least 1 second"
+            
+            # Check maximum duration for all actions
             if cmd.duration > Config.MAX_BAN_DURATION:
                 return False, f"Duration cannot exceed {Config.MAX_BAN_DURATION} seconds"
         

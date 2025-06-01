@@ -23,7 +23,7 @@ file_handler.setFormatter(file_formatter)
 
 # Create console handler for essential messages only
 console_handler = logging.StreamHandler(sys.stdout)
-console_handler.setLevel(logging.WARNING)  # Only show warnings and errors in terminal
+console_handler.setLevel(logging.CRITICAL)  # Only show critical errors in terminal
 console_formatter = logging.Formatter('%(levelname)s: %(message)s')
 console_handler.setFormatter(console_formatter)
 
@@ -36,9 +36,13 @@ logging.basicConfig(
 # Disable noisy HTTP logs
 logging.getLogger('httpx').disabled = True
 logging.getLogger('httpcore').disabled = True
-logging.getLogger('openai').setLevel(logging.WARNING)
-logging.getLogger('urllib3').setLevel(logging.WARNING)
+logging.getLogger('httpcore.connection').disabled = True
+logging.getLogger('httpcore.http11').disabled = True
+logging.getLogger('urllib3').disabled = True
+logging.getLogger('urllib3.connectionpool').disabled = True
+logging.getLogger('openai._base_client').disabled = True
 logging.getLogger('aiohttp').setLevel(logging.WARNING)
+logging.getLogger('requests').setLevel(logging.WARNING)
 
 from config import Config
 from voice_recognition_hf import VoiceRecognitionHF
@@ -105,7 +109,6 @@ class AIModeratorBot:
             Config.validate()
             logger.info("Full configuration validated successfully")
             
-            print("🚀 Starting Twitch AI Moderator Bot...")
             self.is_running = True
             
             # Store reference to the current event loop
@@ -122,10 +125,9 @@ class AIModeratorBot:
             # Send startup message to chat
             await self.twitch_bot.send_status_message()
             
-            print("🎤 Twitch AI Moderator Bot is now running!")
-            print(f"🎯 Moderating channel: {Config.TWITCH_CHANNEL}")
-            print("🎯 Voice commands are active. Say 'Hey Brian' followed by your command.")
-            print("📝 Example: 'Hey Brian, ban username123 for 10 minutes'")
+            print(f"🎤 Voice commands active for channel: {Config.TWITCH_CHANNEL}")
+            print("Say 'Hey Brian' followed by your command.")
+            print("=" * 50)
             
             # Keep the main thread alive
             while self.is_running:
@@ -140,7 +142,7 @@ class AIModeratorBot:
     
     async def stop(self):
         """Stop the Twitch AI Moderator Bot"""
-        print("🛑 Stopping Twitch AI Moderator Bot...")
+        print("\n🛑 Stopping bot...")
         logger.info("Stopping Twitch AI Moderator Bot...")
         self.is_running = False
         
@@ -152,24 +154,33 @@ class AIModeratorBot:
         if self.twitch_bot:
             await self.twitch_bot.close()
         
-        print("✅ Twitch AI Moderator Bot stopped")
+        print("✅ Bot stopped")
         logger.info("Twitch AI Moderator Bot stopped")
     
     def _on_voice_command(self, command_text: str):
         """Handle voice commands"""
         logger.info(f"Processing voice command: {command_text}")
         
-        # Process the command
-        moderation_cmd = self.command_processor.process_command(command_text)
+        # Show the full command that was spoken (including "Hey Brian")
+        print(f"🎯 Command: \"{command_text}\"")
+        
+        # Extract the actual command part after the activation keyword
+        actual_command = command_text
+        if Config.VOICE_ACTIVATION_KEYWORD in command_text:
+            keyword_index = command_text.find(Config.VOICE_ACTIVATION_KEYWORD)
+            actual_command = command_text[keyword_index + len(Config.VOICE_ACTIVATION_KEYWORD):].strip()
+        
+        # Process the command (using the extracted part)
+        moderation_cmd = self.command_processor.process_command(actual_command)
         
         if moderation_cmd:
             # Validate the command
+            logger.debug(f"Validating command: {moderation_cmd}")
             is_valid, error_msg = self.command_processor.validate_command(moderation_cmd)
+            logger.debug(f"Validation result: valid={is_valid}, error='{error_msg}'")
             
             if is_valid:
-                # Show command in terminal for user feedback
-                print(f"🎯 Executing: {moderation_cmd.action}" + (f" on {moderation_cmd.username}" if moderation_cmd.username else ""))
-                
+                logger.debug(f"Command is valid, scheduling execution")
                 # Schedule the command execution in the main event loop
                 if self.event_loop and not self.event_loop.is_closed():
                     try:
@@ -188,21 +199,21 @@ class AIModeratorBot:
                 print(f"❌ Invalid command: {error_msg}")
                 logger.warning(f"Invalid command: {error_msg}")
         else:
-            print(f"❓ Could not understand command: {command_text}")
-            logger.warning(f"Could not understand command: {command_text}")
+            print(f"❓ Could not understand command")
+            logger.warning(f"Could not understand command: {actual_command}")
     
     async def _execute_command_async(self, cmd: ModerationCommand):
         """Execute a moderation command asynchronously"""
         try:
             success = await self.twitch_bot.execute_moderation_command(cmd)
             if success:
-                print(f"✅ Command executed successfully: {cmd.action}")
+                print(f"✅ Executed successfully")
                 logger.info(f"✅ Command executed successfully: {cmd.action}")
             else:
-                print(f"❌ Command execution failed: {cmd.action}")
+                print(f"❌ Execution failed")
                 logger.error(f"❌ Command execution failed: {cmd.action}")
         except Exception as e:
-            print(f"❌ Error executing command: {e}")
+            print(f"❌ Error: {e}")
             logger.error(f"Error executing command: {e}")
     
     def _on_command_executed(self, cmd: ModerationCommand, success: bool):
@@ -344,9 +355,6 @@ async def main():
         # Get Twitch channel from user
         channel = bot.get_twitch_channel()
         Config.set_twitch_channel(channel)
-        
-        print(f"\n✅ Channel set to: {Config.TWITCH_CHANNEL}")
-        print("🚀 Starting bot initialization...")
         
         # Start the bot
         success = await bot.start()

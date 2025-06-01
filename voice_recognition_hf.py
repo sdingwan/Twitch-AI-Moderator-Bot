@@ -208,8 +208,6 @@ class VoiceRecognitionHF:
             if len(audio_array) < self.sample_rate * 0.5:  # Less than 0.5 seconds
                 return
             
-            logger.debug(f"Transcribing audio of length: {len(audio_array)/self.sample_rate:.2f} seconds")
-            
             # Create WAV file in memory
             wav_buffer = io.BytesIO()
             with wave.open(wav_buffer, 'wb') as wav_file:
@@ -233,8 +231,6 @@ class VoiceRecognitionHF:
                 text = result.get('text', '').strip().lower()
                 
                 if text:
-                    logger.debug(f"HF Whisper transcription: {text}")
-                    
                     # Check if the activation keyword is present
                     if Config.VOICE_ACTIVATION_KEYWORD in text:
                         # Extract command after the activation keyword
@@ -243,7 +239,8 @@ class VoiceRecognitionHF:
                         
                         if command:
                             logger.info(f"🎯 Voice command detected: {command}")
-                            self.command_callback(command)
+                            # Pass the full text including "Hey Brian" to the callback
+                            self.command_callback(text)
                         else:
                             logger.debug("Activation keyword detected but no command found")
             else:

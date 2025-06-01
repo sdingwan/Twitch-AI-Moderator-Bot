@@ -191,7 +191,7 @@ class TwitchModeratorBot:
     async def send_status_message(self):
         """Send status message to chat"""
         try:
-            await self.api.send_chat_message("🤖 AI Bot is online!")
+            await self.api.send_chat_message("🤖 AI Moderator is online!")
         except Exception as e:
             logger.error(f"Failed to send status message: {e}")
     
