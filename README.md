@@ -10,6 +10,40 @@ A simple Twitch moderation bot that responds to voice commands using cloud-hoste
 - 📝 **Chat Monitoring**: Automatically logs recent chat usernames for better matching
 - ☁️ **Fast & Accurate**: Uses cloud-hosted Whisper Large V3 (no heavy local models)
 - 📝 **Clean Logs**: No spam, just important information
+- 🌐 **Web Interface**: Control the bot from your browser with a modern UI
+
+## 🌐 Web Interface
+
+The bot now includes a beautiful web interface that lets you control everything from your browser!
+
+### Features:
+- 📊 **Real-time Status**: See bot status, voice recognition state, and last commands
+- 🎛️ **Easy Controls**: Start/stop bot and voice recognition with buttons
+- 📝 **Text Commands**: Execute commands via text input (no voice needed)
+- 📋 **Activity Log**: Real-time log of all bot activities
+- 📱 **Responsive Design**: Works on desktop, tablet, and mobile
+
+### Quick Start with Web Interface:
+```bash
+# Install dependencies (if not already done)
+pip install -r requirements.txt
+
+# Start the web interface
+python start_web.py
+# OR
+python web_interface.py
+```
+
+Then open your browser to: **http://localhost:8000**
+
+### Web Interface Usage:
+1. **Configure**: Enter your Twitch channel name
+2. **Start Bot**: Click "Start Bot" to connect to Twitch
+3. **Voice Control**: Click "Start Voice Recognition" to enable voice commands
+4. **Text Commands**: Use the text input to send commands without voice
+5. **Monitor**: Watch the activity log for real-time feedback
+
+**Both voice and text commands work simultaneously!**
 
 ## 🎯 Voice Commands
 
@@ -110,7 +144,9 @@ python main.py --help       # Show help
 
 ```
 Twitch-AI-Moderator-Bot/
-├── main.py                 # Main bot application
+├── main.py                 # Main bot application (terminal)
+├── web_interface.py        # Web interface application
+├── start_web.py            # Simple web interface launcher
 ├── voice_recognition_hf.py # Voice processing with cloud-hosted Whisper Large V3
 ├── command_processor.py    # Command parsing and validation
 ├── username_logger.py      # Chat monitoring and phonetic username matching
@@ -136,6 +172,7 @@ Twitch-AI-Moderator-Bot/
 - HTTP request logs are automatically suppressed for clean output
 - Voice activation keyword can be customized in the `.env` file
 - Phonetic matching threshold can be adjusted in the code (default: 0.5)
+- Web interface provides both voice and text command options
 
 ## 🆘 Troubleshooting
 
@@ -158,4 +195,9 @@ python main.py --list-mics  # Find your microphone index
 
 **Twitch commands failing?**
 - Verify your OAuth token has the correct scopes
-- Make sure the bot account has moderator permissions in your channel 
+- Make sure the bot account has moderator permissions in your channel
+
+**Web interface not loading?**
+- Make sure you installed FastAPI: `pip install -r requirements.txt`
+- Check if port 8000 is available
+- Try accessing `http://127.0.0.1:8000` instead of localhost
