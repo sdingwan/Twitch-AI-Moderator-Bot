@@ -16,21 +16,12 @@ A simple Twitch moderation bot that responds to voice commands using cloud-hoste
 
 The bot now includes a beautiful web interface that lets you control everything from your browser!
 
-### Features:
-- 📊 **Real-time Status**: See bot status, voice recognition state, and last commands
-- 🎛️ **Easy Controls**: Start/stop bot and voice recognition with buttons
-- 📝 **Text Commands**: Execute commands via text input (no voice needed)
-- 📋 **Activity Log**: Real-time log of all bot activities
-- 📱 **Responsive Design**: Works on desktop, tablet, and mobile
 
 ### Quick Start with Web Interface:
 ```bash
 # Install dependencies (if not already done)
 pip install -r requirements.txt
 
-# Start the web interface
-python start_web.py
-# OR
 python web_interface.py
 ```
 
