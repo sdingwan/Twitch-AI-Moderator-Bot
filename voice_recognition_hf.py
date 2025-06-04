@@ -9,7 +9,8 @@ import wave
 import tempfile
 import os
 import requests
-from typing import Optional, Callable
+import subprocess
+from typing import Callable
 from config import Config
 
 logger = logging.getLogger(__name__)
@@ -26,6 +27,11 @@ class VoiceRecognitionHF:
         self.is_listening = False
         self.listen_thread = None
         self.audio_queue = queue.Queue()
+
+        # External stream processes when using Twitch audio
+        self.streamlink_process = None
+        self.ffmpeg_process = None
+        self.stream_read_thread = None
         
         # Audio recording settings
         self.sample_rate = 16000  # Good quality for speech recognition
@@ -33,13 +39,12 @@ class VoiceRecognitionHF:
         self.channels = 1
         self.format = pyaudio.paInt16  # 16-bit for better compatibility
         
-        # PyAudio setup
+        # PyAudio setup (used for WAV formatting)
         self.audio = pyaudio.PyAudio()
-        self.stream = None
         
         # Initialize Hugging Face Inference Endpoint
         self._setup_hf_endpoint()
-        self._setup_microphone()
+        self._setup_twitch_stream()
     
     def _setup_hf_endpoint(self):
         """Setup Hugging Face Inference Endpoint for Whisper"""
@@ -62,34 +67,53 @@ class VoiceRecognitionHF:
             logger.error(f"Failed to setup HF endpoint: {e}")
             raise
     
-    def _setup_microphone(self):
-        """Setup and configure microphone"""
+
+    def _setup_twitch_stream(self):
+        """Prepare to capture audio from the Twitch stream"""
+        if not Config.TWITCH_CHANNEL:
+            raise ValueError("Twitch channel not set for Twitch audio source")
+        logger.info(f"Using Twitch stream audio from channel: {Config.TWITCH_CHANNEL}")
+
+    def _start_twitch_stream(self):
+        """Start capturing audio from Twitch using streamlink and ffmpeg"""
         try:
-            # Get microphone info
-            if Config.MICROPHONE_INDEX >= 0:
-                device_info = self.audio.get_device_info_by_index(Config.MICROPHONE_INDEX)
-                logger.info(f"Using microphone: {device_info['name']}")
-            else:
-                device_info = self.audio.get_default_input_device_info()
-                Config.MICROPHONE_INDEX = device_info['index']
-                logger.info(f"Using default microphone: {device_info['name']}")
-            
-            # Test microphone access
-            test_stream = self.audio.open(
-                format=self.format,
-                channels=self.channels,
-                rate=self.sample_rate,
-                input=True,
-                input_device_index=Config.MICROPHONE_INDEX,
-                frames_per_buffer=self.chunk_size
+            cmd_streamlink = [
+                'streamlink', f'https://twitch.tv/{Config.TWITCH_CHANNEL}',
+                'audio_only', '-O'
+            ]
+            self.streamlink_process = subprocess.Popen(
+                cmd_streamlink, stdout=subprocess.PIPE, bufsize=0
             )
-            test_stream.close()
-            
-            logger.info("✅ Microphone setup successful")
-            
+
+            ffmpeg_cmd = [
+                'ffmpeg', '-loglevel', 'quiet', '-i', 'pipe:0',
+                '-f', 's16le', '-acodec', 'pcm_s16le',
+                '-ac', str(self.channels), '-ar', str(self.sample_rate), '-'
+            ]
+            self.ffmpeg_process = subprocess.Popen(
+                ffmpeg_cmd, stdin=self.streamlink_process.stdout,
+                stdout=subprocess.PIPE, bufsize=0
+            )
+
+            self.stream_read_thread = threading.Thread(
+                target=self._read_twitch_audio, daemon=True
+            )
+            self.stream_read_thread.start()
         except Exception as e:
-            logger.error(f"Failed to setup microphone: {e}")
+            logger.error(f"Failed to start Twitch audio stream: {e}")
             raise
+
+    def _read_twitch_audio(self):
+        """Read raw PCM audio from ffmpeg process and queue it"""
+        try:
+            while self.is_listening and self.ffmpeg_process:
+                data = self.ffmpeg_process.stdout.read(self.chunk_size * 2)
+                if not data:
+                    time.sleep(0.01)
+                    continue
+                self.audio_queue.put(data)
+        except Exception as e:
+            logger.error(f"Error reading Twitch audio: {e}")
     
     def start_listening(self):
         """Start listening for voice commands in a separate thread"""
@@ -98,24 +122,14 @@ class VoiceRecognitionHF:
             return
         
         try:
-            # Open audio stream
-            self.stream = self.audio.open(
-                format=self.format,
-                channels=self.channels,
-                rate=self.sample_rate,
-                input=True,
-                input_device_index=Config.MICROPHONE_INDEX,
-                frames_per_buffer=self.chunk_size,
-                stream_callback=self._audio_callback
-            )
-            
+            self._start_twitch_stream()
+
             self.is_listening = True
-            self.stream.start_stream()
-            
+
             # Start processing thread
             self.listen_thread = threading.Thread(target=self._process_audio_loop, daemon=True)
             self.listen_thread.start()
-            
+
             logger.info("🎤 Voice recognition started with Hugging Face Inference Endpoint")
             
         except Exception as e:
@@ -125,23 +139,21 @@ class VoiceRecognitionHF:
     def stop_listening(self):
         """Stop listening for voice commands"""
         self.is_listening = False
-        
-        if self.stream:
-            self.stream.stop_stream()
-            self.stream.close()
-            self.stream = None
+
+        if self.ffmpeg_process:
+            self.ffmpeg_process.terminate()
+            self.ffmpeg_process = None
+        if self.streamlink_process:
+            self.streamlink_process.terminate()
+            self.streamlink_process = None
+        if self.stream_read_thread and self.stream_read_thread.is_alive():
+            self.stream_read_thread.join(timeout=2)
         
         if self.listen_thread and self.listen_thread.is_alive():
             self.listen_thread.join(timeout=2)
         
         logger.info("Voice recognition stopped")
     
-    def _audio_callback(self, in_data, frame_count, time_info, status):
-        """Callback function for audio stream"""
-        if self.is_listening:
-            self.audio_queue.put(in_data)
-        
-        return (None, pyaudio.paContinue)
     
     def _process_audio_loop(self):
         """Main audio processing loop that runs in a separate thread"""
@@ -249,87 +261,12 @@ class VoiceRecognitionHF:
         except Exception as e:
             logger.error(f"Error transcribing audio with HF endpoint: {e}")
     
-    def test_microphone(self):
-        """Test microphone functionality with Hugging Face Inference Endpoint"""
-        try:
-            logger.info("Testing microphone with Hugging Face Inference Endpoint...")
-            logger.info("Speak for 3 seconds after the beep...")
-            
-            # Record test audio
-            test_stream = self.audio.open(
-                format=self.format,
-                channels=self.channels,
-                rate=self.sample_rate,
-                input=True,
-                input_device_index=Config.MICROPHONE_INDEX,
-                frames_per_buffer=self.chunk_size
-            )
-            
-            print("🔴 Recording... (3 seconds)")
-            audio_data = []
-            for _ in range(int(self.sample_rate * 3 / self.chunk_size)):
-                data = test_stream.read(self.chunk_size)
-                audio_data.append(data)
-            
-            test_stream.close()
-            print("⏹️ Recording stopped")
-            
-            # Combine audio data
-            combined_audio = b''.join(audio_data)
-            
-            # Create WAV file in memory
-            wav_buffer = io.BytesIO()
-            with wave.open(wav_buffer, 'wb') as wav_file:
-                wav_file.setnchannels(self.channels)
-                wav_file.setsampwidth(self.audio.get_sample_size(self.format))
-                wav_file.setframerate(self.sample_rate)
-                wav_file.writeframes(combined_audio)
-            
-            wav_buffer.seek(0)
-            
-            # Transcribe with HF Endpoint
-            logger.info("Transcribing with Hugging Face Inference Endpoint...")
-            response = requests.post(
-                self.hf_endpoint_url,
-                headers=self.hf_headers,
-                data=wav_buffer.getvalue(),
-                timeout=30
-            )
-            
-            if response.status_code == 200:
-                result = response.json()
-                text = result.get('text', '').strip()
-                logger.info(f"✅ Microphone test successful. You said: '{text}'")
-                return True
-            else:
-                logger.error(f"❌ Microphone test failed: {response.status_code} - {response.text}")
-                return False
-            
-        except Exception as e:
-            logger.error(f"❌ Microphone test failed: {e}")
-            return False
-    
-    @staticmethod
-    def list_microphones():
-        """List available microphones"""
-        audio = pyaudio.PyAudio()
-        microphones = []
-        
-        try:
-            logger.info("Available microphones:")
-            
-            for i in range(audio.get_device_count()):
-                device_info = audio.get_device_info_by_index(i)
-                if device_info['maxInputChannels'] > 0:
-                    logger.info(f"  {i}: {device_info['name']} (Channels: {device_info['maxInputChannels']})")
-                    microphones.append(device_info)
-        
-        finally:
-            audio.terminate()
-        
-        return microphones
     
     def __del__(self):
         """Cleanup when object is destroyed"""
+        try:
+            self.stop_listening()
+        except Exception:
+            pass
         if hasattr(self, 'audio') and self.audio:
-            self.audio.terminate() 
+            self.audio.terminate()

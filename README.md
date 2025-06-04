@@ -96,7 +96,6 @@ HF_ENDPOINT_URL=https://your-endpoint.endpoints.huggingface.cloud
 
 # Voice Settings
 VOICE_ACTIVATION_KEYWORD=hey brian
-MICROPHONE_INDEX=-1
 ```
 
 ### 3. Deploy Whisper to the Cloud
@@ -126,8 +125,6 @@ python main.py
 
 ```bash
 python main.py              # Start the bot
-python main.py --test-mic   # Test your microphone
-python main.py --list-mics  # List available microphones
 python main.py --help       # Show help
 ```
 
@@ -151,7 +148,7 @@ Twitch-AI-Moderator-Bot/
 ## 🔧 Requirements
 
 - Python 3.8+
-- Microphone
+- ffmpeg and streamlink (for Twitch audio)
 - OpenAI API Key
 - Twitch Developer Account
 
@@ -167,15 +164,9 @@ Twitch-AI-Moderator-Bot/
 
 ## 🆘 Troubleshooting
 
-**Microphone not working?**
-```bash
-python main.py --list-mics  # Find your microphone index
-# Update MICROPHONE_INDEX in .env file
-```
-
 **Bot not responding to voice?**
 - Check your Hugging Face API token and endpoint URL
-- Test with: `python main.py --test-mic`
+- Make sure ffmpeg and streamlink are installed
 - Speak clearly and include "Hey Brian" before commands
 
 **Username not being matched?**

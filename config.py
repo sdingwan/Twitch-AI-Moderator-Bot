@@ -21,7 +21,6 @@ class Config:
     
     # Voice Recognition Settings
     VOICE_ACTIVATION_KEYWORD = os.getenv('VOICE_ACTIVATION_KEYWORD', 'hey brian').lower()
-    MICROPHONE_INDEX = int(os.getenv('MICROPHONE_INDEX', 0))
     VOICE_TIMEOUT = int(os.getenv('VOICE_TIMEOUT', 5))
     VOICE_PHRASE_TIMEOUT = int(os.getenv('VOICE_PHRASE_TIMEOUT', 2))
     
