@@ -20,7 +20,7 @@ from config import Config
 logger = logging.getLogger(__name__)
 
 class UsernameLogger:
-    def __init__(self, max_usernames: int = 30, update_interval: int = 2):
+    def __init__(self, max_usernames: int = 50, update_interval: int = 0.3):
         """
         Initialize the username logger
         

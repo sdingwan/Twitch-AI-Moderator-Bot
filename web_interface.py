@@ -87,7 +87,7 @@ class WebAIModeratorBot:
                 raise ValueError(f"Missing required environment variables: {', '.join(missing_vars)}")
             
             # Initialize components
-            self.username_logger = UsernameLogger(max_usernames=30, update_interval=2)
+            self.username_logger = UsernameLogger(max_usernames=50, update_interval=0.5)
             self.phonetic_helper = PhoneticModerationHelper(self.username_logger)
             self.command_processor = CommandProcessor(phonetic_helper=self.phonetic_helper)
             self.twitch_bot = TwitchModeratorBot(command_callback=self._on_command_executed)
