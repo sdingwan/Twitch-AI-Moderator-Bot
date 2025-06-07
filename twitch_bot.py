@@ -89,6 +89,9 @@ class TwitchModeratorBot:
             elif cmd.action == 'unrestrict':
                 # Remove the restriction (unban/untimeout)
                 success = await self.api.unban_user(cmd.username)
+            elif cmd.action == 'weather':
+                # Change weather location by sending command to chat
+                success = await self._change_weather_location(cmd.weather_location)
             else:
                 logger.error(f"Unknown moderation action: {cmd.action}")
                 return False
@@ -167,4 +170,23 @@ class TwitchModeratorBot:
             return await self.api.get_moderators()
         except Exception as e:
             logger.error(f"Failed to get moderators: {e}")
-            return [] 
+            return []
+    
+    async def _change_weather_location(self, location: str) -> bool:
+        """Change the weather location by sending a command to chat"""
+        try:
+            # Format the command to edit the !weather command with the new location
+            weather_command = f'!command edit !weather ${{weather ${{1:|"{location}"}}}}'
+            
+            success = await self.api.send_chat_message(weather_command)
+            
+            if success:
+                logger.info(f"✅ Weather location changed to: {location}")
+            else:
+                logger.error(f"❌ Failed to change weather location to: {location}")
+            
+            return success
+            
+        except Exception as e:
+            logger.error(f"Error changing weather location: {e}")
+            return False 

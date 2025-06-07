@@ -10,12 +10,13 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class ModerationCommand:
-    action: str  # 'ban', 'timeout', 'unban', 'clear', 'slow', 'followers_only', 'subscribers_only', etc.
+    action: str  # 'ban', 'timeout', 'unban', 'clear', 'slow', 'followers_only', 'subscribers_only', 'weather', etc.
     username: Optional[str] = None
     duration: Optional[int] = None  # in seconds
     reason: Optional[str] = None
     additional_params: Optional[Dict] = None
     original_username: Optional[str] = None  # Store the original spoken username
+    weather_location: Optional[str] = None  # Store weather location for weather commands
 
 class CommandProcessor:
     def __init__(self, phonetic_helper=None):
@@ -93,10 +94,11 @@ class CommandProcessor:
             Command: "{command_text}"
             
             Respond ONLY with a valid JSON object containing:
-            - action: one of [ban, unban, timeout, untimeout, clear, slow, slow_off, followers_only, followers_off, subscribers_only, subscribers_off, emote_only, emote_off, restrict, unrestrict, unknown]
+            - action: one of [ban, unban, timeout, untimeout, clear, slow, slow_off, followers_only, followers_off, subscribers_only, subscribers_off, emote_only, emote_off, restrict, unrestrict, weather, unknown]
             - username: target username (if applicable, null otherwise)
             - duration: duration in seconds (if applicable, null otherwise)
             - reason: reason for action (if mentioned, null otherwise)
+            - weather_location: location for weather commands (if applicable, null otherwise)
             
             Rules for parsing:
             1. BANS are PERMANENT - never set duration for "ban" action, always null
@@ -124,6 +126,7 @@ class CommandProcessor:
             - "disable emote only", "emotes off", "remove emote only" -> emote_off
             - "restrict user", "put user in restricted mode" -> restrict
             - "unrestrict user", "remove restrictions" -> unrestrict
+            - "change weather to [location]", "set weather to [location]", "weather location [location]" -> weather
             
             Examples:
             "ban johndoe" -> {{"action": "ban", "username": "johndoe", "duration": null, "reason": null}}
@@ -144,9 +147,12 @@ class CommandProcessor:
             "remove sub only" -> {{"action": "subscribers_off", "username": null, "duration": null, "reason": null}}
             "turn off sub only" -> {{"action": "subscribers_off", "username": null, "duration": null, "reason": null}}
             "emote only mode" -> {{"action": "emote_only", "username": null, "duration": null, "reason": null}}
-            "turn off emote only" -> {{"action": "emote_off", "username": null, "duration": null, "reason": null}}
-            "restrict baduser" -> {{"action": "restrict", "username": "baduser", "duration": null, "reason": null}}
-            "unrestrict gooduser" -> {{"action": "unrestrict", "username": "gooduser", "duration": null, "reason": null}}
+            "turn off emote only" -> {{"action": "emote_off", "username": null, "duration": null, "reason": null, "weather_location": null}}
+            "restrict baduser" -> {{"action": "restrict", "username": "baduser", "duration": null, "reason": null, "weather_location": null}}
+            "unrestrict gooduser" -> {{"action": "unrestrict", "username": "gooduser", "duration": null, "reason": null, "weather_location": null}}
+            "change weather to Naples, Italy" -> {{"action": "weather", "username": null, "duration": null, "reason": null, "weather_location": "Naples, Italy"}}
+            "set weather to Tokyo, Japan" -> {{"action": "weather", "username": null, "duration": null, "reason": null, "weather_location": "Tokyo, Japan"}}
+            "weather location London, UK" -> {{"action": "weather", "username": null, "duration": null, "reason": null, "weather_location": "London, UK"}}
             
             Respond with ONLY the JSON object, no other text.
             """
@@ -171,7 +177,8 @@ class CommandProcessor:
                         action=parsed.get('action'),
                         username=parsed.get('username'),
                         duration=parsed.get('duration'),
-                        reason=parsed.get('reason')
+                        reason=parsed.get('reason'),
+                        weather_location=parsed.get('weather_location')
                     )
                     logger.debug(f"Created command object: {cmd}")
                     return cmd
@@ -199,12 +206,19 @@ class CommandProcessor:
         # Commands that require a username
         user_required_actions = ['ban', 'unban', 'timeout', 'untimeout', 'restrict', 'unrestrict']
         
+        # Commands that require a weather location
+        weather_required_actions = ['weather']
+        
         # Commands that can have durations
         duration_allowed_actions = ['timeout', 'slow', 'followers_only']
         
         # Validate username for user-specific actions
         if cmd.action in user_required_actions and not cmd.username:
             return False, f"Username required for {cmd.action} action"
+        
+        # Validate weather location for weather actions
+        if cmd.action in weather_required_actions and not cmd.weather_location:
+            return False, f"Weather location required for {cmd.action} action"
         
         # Validate username format
         if cmd.username:
@@ -241,5 +255,5 @@ class CommandProcessor:
         return [
             'ban', 'unban', 'timeout', 'untimeout', 'clear', 'slow', 'slow_off',
             'followers_only', 'followers_off', 'subscribers_only', 'subscribers_off',
-            'emote_only', 'emote_off', 'restrict', 'unrestrict'
+            'emote_only', 'emote_off', 'restrict', 'unrestrict', 'weather'
         ] 

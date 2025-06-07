@@ -667,6 +667,8 @@ async def get_index():
                             <li>"Hey Brian, slow mode 30 seconds"</li>
                             <li>"Hey Brian, followers only mode"</li>
                             <li>"Hey Brian, subscribers only mode"</li>
+                            <li>"Hey Brian, change weather to Naples, Italy"</li>
+                            <li>"Hey Brian, set weather to Tokyo, Japan"</li>
                         </ul>
                     </div>
                 </div>

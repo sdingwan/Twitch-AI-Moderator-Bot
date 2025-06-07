@@ -36,6 +36,20 @@ Then open your browser to: **http://localhost:8000**
 
 **Both voice and text commands work simultaneously!**
 
+## 🌤️ Weather Feature
+
+The bot now includes a smart weather location feature that integrates with your existing `!weather` command:
+
+- **Voice Control**: Say "Hey Brian, change weather to [location]" to update the weather location
+- **Automatic Command**: The bot sends `!command edit !weather ${weather ${1:|"[location]"}}` to chat
+- **Confirmation**: Shows a confirmation message when the location is updated
+- **Seamless Integration**: Works with any existing weather bot setup
+
+### Weather Commands:
+- `"Hey Brian, change weather to Naples, Italy"`
+- `"Hey Brian, set weather to Tokyo, Japan"`
+- `"Hey Brian, weather location London, UK"`
+
 ## 🎯 Voice Commands
 
 - `"Hey Brian, ban username123 for 10 minutes"`
@@ -45,6 +59,8 @@ Then open your browser to: **http://localhost:8000**
 - `"Hey Brian, slow mode 30"`
 - `"Hey Brian, followers only mode"`
 - `"Hey Brian, subscribers only mode"`
+- `"Hey Brian, change weather to Naples, Italy"`
+- `"Hey Brian, set weather to Tokyo, Japan"`
 
 ## 🔍 Smart Username Matching
 
