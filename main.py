@@ -14,8 +14,6 @@ def print_help():
     print("\n" + "="*60)
     print("USAGE:")
     print("  python web_interface.py         - Start the web interface (RECOMMENDED)")
-    print("  python main.py --test-mic       - Test microphone")
-    print("  python main.py --list-mics      - List available microphones")
     print("  python main.py --help           - Show this help")
     print("\n" + "="*60)
     print("WEB INTERFACE (Recommended):")
@@ -40,42 +38,12 @@ def print_help():
     print("  🔍 Smart phonetic username matching")
     print("  📱 Mobile-friendly responsive design")
 
-def test_microphone():
-    """Test microphone functionality"""
-    try:
-        from voice_recognition_hf import VoiceRecognitionHF
-        print("🎤 Testing microphone...")
-        voice_recognition = VoiceRecognitionHF(lambda x: None)
-        voice_recognition.test_microphone()
-    except ImportError as e:
-        print(f"❌ Missing dependencies: {e}")
-        print("Please install requirements: pip install -r requirements.txt")
-    except Exception as e:
-        print(f"❌ Error testing microphone: {e}")
-
-def list_microphones():
-    """List available microphones"""
-    try:
-        from voice_recognition_hf import VoiceRecognitionHF
-        print("🎤 Available microphones:")
-        VoiceRecognitionHF.list_microphones()
-    except ImportError as e:
-        print(f"❌ Missing dependencies: {e}")
-        print("Please install requirements: pip install -r requirements.txt")
-    except Exception as e:
-        print(f"❌ Error listing microphones: {e}")
 
 def main():
     """Main entry point"""
     # Check command line arguments
     if len(sys.argv) > 1:
-        if sys.argv[1] == '--test-mic':
-            test_microphone()
-            return
-        elif sys.argv[1] == '--list-mics':
-            list_microphones()
-            return
-        elif sys.argv[1] == '--help':
+        if sys.argv[1] == '--help':
             print_help()
             return
         else:
@@ -94,7 +62,6 @@ def main():
     print("  3. Enter your Twitch channel and click 'Start Bot'")
     print("\nFor other options:")
     print("  python main.py --help      - Show all commands")
-    print("  python main.py --test-mic  - Test your microphone")
     print("=" * 60)
 
 if __name__ == "__main__":

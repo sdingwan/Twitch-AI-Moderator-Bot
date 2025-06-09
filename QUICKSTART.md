@@ -36,9 +36,8 @@ VOICE_ACTIVATION_KEYWORD=hey brian
 2. Create new application → Get Client ID & Secret
 3. Generate OAuth token with scopes: `channel:moderate`, `chat:edit`, `chat:read`
 
-## 5. Test & Run
+## 5. Run
 ```bash
-python main.py --test-mic    # Test microphone
 python main.py              # Start bot
 ```
 
