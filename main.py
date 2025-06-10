@@ -4,30 +4,30 @@ Utility functions for Twitch AI Moderator Bot
 Debug and testing utilities for microphone setup
 """
 
-def test_microphone():
-    """Test microphone functionality"""
+def test_stream_audio():
+    """Test Twitch stream audio capture functionality"""
     try:
         from voice_recognition_hf import VoiceRecognitionHF
-        print("🎤 Testing microphone...")
+        print("🎤 Testing Twitch stream audio capture...")
         voice_recognition = VoiceRecognitionHF(lambda x: None)
-        voice_recognition.test_microphone()
+        voice_recognition.test_stream_audio()
     except ImportError as e:
         print(f"❌ Missing dependencies: {e}")
         print("Please install requirements: pip install -r requirements.txt")
     except Exception as e:
-        print(f"❌ Error testing microphone: {e}")
+        print(f"❌ Error testing stream audio capture: {e}")
 
-def list_microphones():
-    """List available microphones"""
+def show_stream_info():
+    """Show information about Twitch stream audio capture"""
     try:
         from voice_recognition_hf import VoiceRecognitionHF
-        print("🎤 Available microphones:")
-        VoiceRecognitionHF.list_microphones()
+        print("📡 Twitch Stream Audio Capture:")
+        VoiceRecognitionHF.list_stream_info()
     except ImportError as e:
         print(f"❌ Missing dependencies: {e}")
         print("Please install requirements: pip install -r requirements.txt")
     except Exception as e:
-        print(f"❌ Error listing microphones: {e}")
+        print(f"❌ Error getting stream info: {e}")
 
 if __name__ == "__main__":
     print("🎤 Twitch AI Moderator Bot - Utilities")
@@ -35,21 +35,21 @@ if __name__ == "__main__":
     print("Main bot interface: python web_interface.py")
     print("=" * 50)
     print("\nAvailable utilities:")
-    print("  Test microphone:")
-    print("    python -c 'from main import test_microphone; test_microphone()'")
-    print("  List microphones:")
-    print("    python -c 'from main import list_microphones; list_microphones()'")
+    print("  Test Twitch stream audio capture:")
+    print("    python -c 'from main import test_stream_audio; test_stream_audio()'")
+    print("  Show stream audio info:")
+    print("    python -c 'from main import show_stream_info; show_stream_info()'")
     print("\nOr run functions directly:")
-    print("  1. test_microphone()")
-    print("  2. list_microphones()")
+    print("  1. test_stream_audio() - Test stream audio capture")
+    print("  2. show_stream_info() - Show stream audio info")
     
     # Simple interactive menu
     while True:
         choice = input("\nEnter 1, 2, or 'q' to quit: ").strip().lower()
         if choice == '1':
-            test_microphone()
+            test_stream_audio()
         elif choice == '2':
-            list_microphones()
+            show_stream_info()
         elif choice in ['q', 'quit', 'exit']:
             print("👋 Goodbye!")
             break

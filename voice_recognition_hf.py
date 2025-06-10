@@ -1,5 +1,4 @@
 import numpy as np
-import pyaudio
 import threading
 import queue
 import time
@@ -9,8 +8,11 @@ import wave
 import tempfile
 import os
 import requests
+import subprocess
+import asyncio
 from typing import Optional, Callable
 from config import Config
+from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
@@ -31,15 +33,19 @@ class VoiceRecognitionHF:
         self.sample_rate = 16000  # Good quality for speech recognition
         self.chunk_size = 1024
         self.channels = 1
-        self.format = pyaudio.paInt16  # 16-bit for better compatibility
         
-        # PyAudio setup
-        self.audio = pyaudio.PyAudio()
-        self.stream = None
+        # Streamlink and FFmpeg processes for Twitch stream capture
+        self.ffmpeg_process = None
+        self.streamlink_process = None
+        self.twitch_stream_url = None
+        
+        # Transcription logging
+        self.transcription_log_file = "stream_transcription.log"
+        self._setup_transcription_logging()
         
         # Initialize Hugging Face Inference Endpoint
         self._setup_hf_endpoint()
-        self._setup_microphone()
+        self._setup_twitch_stream()
     
     def _setup_hf_endpoint(self):
         """Setup Hugging Face Inference Endpoint for Whisper"""
@@ -62,61 +68,89 @@ class VoiceRecognitionHF:
             logger.error(f"Failed to setup HF endpoint: {e}")
             raise
     
-    def _setup_microphone(self):
-        """Setup and configure microphone"""
+    def _setup_twitch_stream(self):
+        """Setup Twitch stream audio capture"""
         try:
-            # Get microphone info
-            if Config.MICROPHONE_INDEX >= 0:
-                device_info = self.audio.get_device_info_by_index(Config.MICROPHONE_INDEX)
-                logger.info(f"Using microphone: {device_info['name']}")
-            else:
-                device_info = self.audio.get_default_input_device_info()
-                Config.MICROPHONE_INDEX = device_info['index']
-                logger.info(f"Using default microphone: {device_info['name']}")
+            # Build Twitch stream URL
+            if not Config.TWITCH_CHANNEL:
+                raise ValueError("Twitch channel not configured")
             
-            # Test microphone access
-            test_stream = self.audio.open(
-                format=self.format,
-                channels=self.channels,
-                rate=self.sample_rate,
-                input=True,
-                input_device_index=Config.MICROPHONE_INDEX,
-                frames_per_buffer=self.chunk_size
-            )
-            test_stream.close()
+            self.twitch_stream_url = f"https://www.twitch.tv/{Config.TWITCH_CHANNEL}"
             
-            logger.info("✅ Microphone setup successful")
+            # Test streamlink and FFmpeg availability
+            try:
+                subprocess.run(['streamlink', '--version'], capture_output=True, check=True)
+                logger.info("✅ Streamlink found and ready")
+            except (subprocess.CalledProcessError, FileNotFoundError):
+                raise Exception("Streamlink not found. Please install streamlink to capture Twitch stream audio.")
+            
+            try:
+                subprocess.run(['ffmpeg', '-version'], capture_output=True, check=True)
+                logger.info("✅ FFmpeg found and ready")
+            except (subprocess.CalledProcessError, FileNotFoundError):
+                raise Exception("FFmpeg not found. Please install FFmpeg to process stream audio.")
+            
+            logger.info(f"✅ Twitch stream setup successful for channel: {Config.TWITCH_CHANNEL}")
             
         except Exception as e:
-            logger.error(f"Failed to setup microphone: {e}")
+            logger.error(f"Failed to setup Twitch stream: {e}")
             raise
     
+    def _setup_transcription_logging(self):
+        """Setup transcription logging to file"""
+        if not Config.ENABLE_TRANSCRIPTION_LOGGING:
+            logger.info("Transcription logging disabled in configuration")
+            return
+            
+        try:
+            # Initialize the transcription log file
+            with open(self.transcription_log_file, 'w', encoding='utf-8') as f:
+                f.write(f"# Twitch Stream Transcription Log - Started at {datetime.now()}\n")
+                f.write(f"# Channel: {Config.TWITCH_CHANNEL}\n")
+                f.write("# Format: [timestamp] transcribed_text\n")
+                f.write("-" * 80 + "\n\n")
+            
+            logger.info(f"✅ Transcription logging setup successful: {self.transcription_log_file}")
+            
+        except Exception as e:
+            logger.error(f"Failed to setup transcription logging: {e}")
+    
+    def _log_transcription(self, text: str):
+        """Log transcribed text to file with timestamp"""
+        if not Config.ENABLE_TRANSCRIPTION_LOGGING:
+            return
+            
+        try:
+            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            log_entry = f"[{timestamp}] {text}\n"
+            
+            # Write to file
+            with open(self.transcription_log_file, 'a', encoding='utf-8') as f:
+                f.write(log_entry)
+            
+            # Also log to console for real-time monitoring
+            logger.info(f"📝 Transcribed: {text}")
+            
+        except Exception as e:
+            logger.error(f"Failed to log transcription: {e}")
+    
     def start_listening(self):
-        """Start listening for voice commands in a separate thread"""
+        """Start listening for voice commands from Twitch stream"""
         if self.is_listening:
             logger.warning("Voice recognition is already listening")
             return
         
         try:
-            # Open audio stream
-            self.stream = self.audio.open(
-                format=self.format,
-                channels=self.channels,
-                rate=self.sample_rate,
-                input=True,
-                input_device_index=Config.MICROPHONE_INDEX,
-                frames_per_buffer=self.chunk_size,
-                stream_callback=self._audio_callback
-            )
+            # Start FFmpeg process to capture Twitch stream audio
+            self._start_ffmpeg_capture()
             
             self.is_listening = True
-            self.stream.start_stream()
             
             # Start processing thread
             self.listen_thread = threading.Thread(target=self._process_audio_loop, daemon=True)
             self.listen_thread.start()
             
-            logger.info("🎤 Voice recognition started with Hugging Face Inference Endpoint")
+            logger.info("🎤 Voice recognition started with Twitch stream audio capture")
             
         except Exception as e:
             logger.error(f"Failed to start voice recognition: {e}")
@@ -126,22 +160,107 @@ class VoiceRecognitionHF:
         """Stop listening for voice commands"""
         self.is_listening = False
         
-        if self.stream:
-            self.stream.stop_stream()
-            self.stream.close()
-            self.stream = None
+        # Stop streamlink and FFmpeg processes
+        if self.ffmpeg_process:
+            try:
+                self.ffmpeg_process.terminate()
+                self.ffmpeg_process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                self.ffmpeg_process.kill()
+            except Exception as e:
+                logger.error(f"Error stopping FFmpeg process: {e}")
+            finally:
+                self.ffmpeg_process = None
+        
+        if self.streamlink_process:
+            try:
+                self.streamlink_process.terminate()
+                self.streamlink_process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                self.streamlink_process.kill()
+            except Exception as e:
+                logger.error(f"Error stopping streamlink process: {e}")
+            finally:
+                self.streamlink_process = None
         
         if self.listen_thread and self.listen_thread.is_alive():
             self.listen_thread.join(timeout=2)
         
         logger.info("Voice recognition stopped")
     
-    def _audio_callback(self, in_data, frame_count, time_info, status):
-        """Callback function for audio stream"""
-        if self.is_listening:
-            self.audio_queue.put(in_data)
-        
-        return (None, pyaudio.paContinue)
+    def _start_ffmpeg_capture(self):
+        """Start streamlink process to capture Twitch stream audio"""
+        try:
+            # Use streamlink to get the stream and pipe directly to FFmpeg for audio processing
+            streamlink_cmd = [
+                'streamlink',
+                '--stdout',  # Output to stdout
+                '--twitch-disable-ads',  # Disable ads for better audio continuity
+                '--retry-streams', '5',  # Retry on stream errors
+                '--retry-open', '3',  # Retry opening stream
+                f'twitch.tv/{Config.TWITCH_CHANNEL}',
+                'audio_only,worst'  # Try audio_only first, fallback to worst quality for audio extraction
+            ]
+            
+            # Start streamlink process that pipes to FFmpeg for audio extraction
+            streamlink_process = subprocess.Popen(
+                streamlink_cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE
+            )
+            
+            # FFmpeg command to process the stream from streamlink
+            ffmpeg_cmd = [
+                'ffmpeg',
+                '-i', 'pipe:0',  # Read from stdin (streamlink output)
+                '-f', 's16le',  # 16-bit little-endian
+                '-ar', str(self.sample_rate),  # Sample rate
+                '-ac', str(self.channels),  # Mono audio
+                '-acodec', 'pcm_s16le',  # Audio codec
+                '-loglevel', 'error',  # Reduce logging
+                '-'  # Output to stdout
+            ]
+            
+            # Start FFmpeg process that reads from streamlink
+            self.ffmpeg_process = subprocess.Popen(
+                ffmpeg_cmd,
+                stdin=streamlink_process.stdout,  # Read from streamlink
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                bufsize=self.chunk_size * 2  # Buffer size in bytes
+            )
+            
+            # Close streamlink stdout in parent to avoid broken pipe
+            streamlink_process.stdout.close()
+            
+            # Store reference to streamlink process for cleanup
+            self.streamlink_process = streamlink_process
+            
+            logger.info(f"Started streamlink + FFmpeg capture for Twitch channel: {Config.TWITCH_CHANNEL}")
+            
+        except Exception as e:
+            logger.error(f"Failed to start streamlink capture: {e}")
+            raise
+    
+    def _read_audio_from_ffmpeg(self):
+        """Read audio data from FFmpeg process"""
+        try:
+            if not self.ffmpeg_process or self.ffmpeg_process.poll() is not None:
+                return None
+            
+            # Read chunk of audio data (2 bytes per sample for 16-bit)
+            chunk_bytes = self.chunk_size * 2
+            audio_data = self.ffmpeg_process.stdout.read(chunk_bytes)
+            
+            if len(audio_data) == chunk_bytes:
+                return audio_data
+            else:
+                # End of stream or partial read
+                return None
+                
+        except Exception as e:
+            logger.error(f"Error reading audio from FFmpeg: {e}")
+            return None
     
     def _process_audio_loop(self):
         """Main audio processing loop that runs in a separate thread"""
@@ -156,10 +275,10 @@ class VoiceRecognitionHF:
         
         while self.is_listening:
             try:
-                # Get audio data with timeout
-                try:
-                    audio_chunk = self.audio_queue.get(timeout=0.1)
-                except queue.Empty:
+                # Get audio data from FFmpeg
+                audio_chunk = self._read_audio_from_ffmpeg()
+                if audio_chunk is None:
+                    time.sleep(0.1)
                     continue
                 
                 # Add to buffer
@@ -212,7 +331,7 @@ class VoiceRecognitionHF:
             wav_buffer = io.BytesIO()
             with wave.open(wav_buffer, 'wb') as wav_file:
                 wav_file.setnchannels(self.channels)
-                wav_file.setsampwidth(self.audio.get_sample_size(self.format))
+                wav_file.setsampwidth(2)  # 16-bit = 2 bytes
                 wav_file.setframerate(self.sample_rate)
                 wav_file.writeframes(audio_data)
             
@@ -231,7 +350,10 @@ class VoiceRecognitionHF:
                 text = result.get('text', '').strip().lower()
                 
                 if text:
-                    # Check if the activation keyword is present
+                    # Log ALL transcribed text to file (real-time streamer speech)
+                    self._log_transcription(text)
+                    
+                    # Check if the activation keyword is present for commands
                     if Config.VOICE_ACTIVATION_KEYWORD in text:
                         # Extract command after the activation keyword
                         keyword_index = text.find(Config.VOICE_ACTIVATION_KEYWORD)
@@ -249,30 +371,42 @@ class VoiceRecognitionHF:
         except Exception as e:
             logger.error(f"Error transcribing audio with HF endpoint: {e}")
     
-    def test_microphone(self):
-        """Test microphone functionality with Hugging Face Inference Endpoint"""
+    def test_stream_audio(self):
+        """Test Twitch stream audio capture functionality"""
         try:
-            logger.info("Testing microphone with Hugging Face Inference Endpoint...")
-            logger.info("Speak for 3 seconds after the beep...")
+            logger.info("Testing Twitch stream audio capture with Hugging Face Inference Endpoint...")
             
-            # Record test audio
-            test_stream = self.audio.open(
-                format=self.format,
-                channels=self.channels,
-                rate=self.sample_rate,
-                input=True,
-                input_device_index=Config.MICROPHONE_INDEX,
-                frames_per_buffer=self.chunk_size
-            )
+            if not Config.TWITCH_CHANNEL:
+                raise ValueError("Twitch channel not configured")
             
-            print("🔴 Recording... (3 seconds)")
+            logger.info(f"Capturing 3 seconds of audio from Twitch stream: {Config.TWITCH_CHANNEL}")
+            
+            # Start streamlink capture
+            self._start_ffmpeg_capture()
+            
+            print("🔴 Capturing from stream... (3 seconds)")
             audio_data = []
             for _ in range(int(self.sample_rate * 3 / self.chunk_size)):
-                data = test_stream.read(self.chunk_size)
+                data = self._read_audio_from_ffmpeg()
+                if data is None:
+                    logger.warning("No audio data received from stream")
+                    break
                 audio_data.append(data)
             
-            test_stream.close()
-            print("⏹️ Recording stopped")
+            # Stop processes
+            if self.ffmpeg_process:
+                self.ffmpeg_process.terminate()
+                self.ffmpeg_process = None
+            
+            if self.streamlink_process:
+                self.streamlink_process.terminate()
+                self.streamlink_process = None
+            
+            print("⏹️ Capture stopped")
+            
+            if not audio_data:
+                logger.error("❌ No audio data captured from stream")
+                return False
             
             # Combine audio data
             combined_audio = b''.join(audio_data)
@@ -281,7 +415,7 @@ class VoiceRecognitionHF:
             wav_buffer = io.BytesIO()
             with wave.open(wav_buffer, 'wb') as wav_file:
                 wav_file.setnchannels(self.channels)
-                wav_file.setsampwidth(self.audio.get_sample_size(self.format))
+                wav_file.setsampwidth(2)  # 16-bit = 2 bytes
                 wav_file.setframerate(self.sample_rate)
                 wav_file.writeframes(combined_audio)
             
@@ -299,37 +433,38 @@ class VoiceRecognitionHF:
             if response.status_code == 200:
                 result = response.json()
                 text = result.get('text', '').strip()
-                logger.info(f"✅ Microphone test successful. You said: '{text}'")
+                logger.info(f"✅ Stream audio capture test successful. Transcribed: '{text}'")
                 return True
             else:
-                logger.error(f"❌ Microphone test failed: {response.status_code} - {response.text}")
+                logger.error(f"❌ Stream audio capture test failed: {response.status_code} - {response.text}")
                 return False
             
         except Exception as e:
-            logger.error(f"❌ Microphone test failed: {e}")
+            logger.error(f"❌ Stream audio capture test failed: {e}")
             return False
     
     @staticmethod
-    def list_microphones():
-        """List available microphones"""
-        audio = pyaudio.PyAudio()
-        microphones = []
-        
-        try:
-            logger.info("Available microphones:")
-            
-            for i in range(audio.get_device_count()):
-                device_info = audio.get_device_info_by_index(i)
-                if device_info['maxInputChannels'] > 0:
-                    logger.info(f"  {i}: {device_info['name']} (Channels: {device_info['maxInputChannels']})")
-                    microphones.append(device_info)
-        
-        finally:
-            audio.terminate()
-        
-        return microphones
+    def list_stream_info():
+        """Show Twitch stream audio capture information"""
+        logger.info("Note: This bot now captures audio directly from Twitch streams.")
+        logger.info("To use this feature:")
+        logger.info("  1. Configure TWITCH_CHANNEL in your .env file")
+        logger.info("  2. Ensure streamlink and FFmpeg are installed on your system")
+        logger.info("  3. The bot will capture audio from the specified Twitch stream")
+        logger.info("  Example: TWITCH_CHANNEL=your_channel_name")
+        logger.info("  Install: pip install streamlink && install FFmpeg")
+        return []
     
     def __del__(self):
         """Cleanup when object is destroyed"""
-        if hasattr(self, 'audio') and self.audio:
-            self.audio.terminate() 
+        if hasattr(self, 'ffmpeg_process') and self.ffmpeg_process:
+            try:
+                self.ffmpeg_process.terminate()
+            except:
+                pass
+        
+        if hasattr(self, 'streamlink_process') and self.streamlink_process:
+            try:
+                self.streamlink_process.terminate()
+            except:
+                pass 

@@ -170,7 +170,7 @@ class TwitchModeratorBot:
             return await self.api.get_moderators()
         except Exception as e:
             logger.error(f"Failed to get moderators: {e}")
-            return []
+            return [] 
     
     async def _change_weather_location(self, location: str) -> bool:
         """Change the weather location by sending a command to chat"""
