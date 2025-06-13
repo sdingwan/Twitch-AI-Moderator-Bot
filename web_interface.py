@@ -23,7 +23,7 @@ from config import Config
 from voice_recognition_hf import VoiceRecognitionHF
 from command_processor import CommandProcessor, ModerationCommand
 from twitch_bot import TwitchModeratorBot
-from username_logger import UsernameLogger, PhoneticModerationHelper
+from username_logger import UsernameLogger, AIModerationHelper
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -88,8 +88,8 @@ class WebAIModeratorBot:
             
             # Initialize components
             self.username_logger = UsernameLogger(max_usernames=50, update_interval=0.5)
-            self.phonetic_helper = PhoneticModerationHelper(self.username_logger)
-            self.command_processor = CommandProcessor(phonetic_helper=self.phonetic_helper)
+            self.ai_helper = AIModerationHelper(self.username_logger)
+            self.command_processor = CommandProcessor(phonetic_helper=self.ai_helper)
             self.twitch_bot = TwitchModeratorBot(command_callback=self._on_command_executed)
             
             # Initialize voice recognition
@@ -199,12 +199,12 @@ class WebAIModeratorBot:
             self.last_command_time = datetime.now().isoformat()
             
             # Process the command
-            moderation_cmd = self.command_processor.process_command(command_text)
+            moderation_cmd = await self.command_processor.process_command(command_text)
             
             if moderation_cmd:
-                # Show phonetic matching result if username was resolved
+                # Show AI matching result if username was resolved
                 if moderation_cmd.original_username and moderation_cmd.username != moderation_cmd.original_username:
-                    await self.broadcast_message(f"🔍 Phonetic match: '{moderation_cmd.original_username}' → '{moderation_cmd.username}'")
+                    await self.broadcast_message(f"🔍 AI match: '{moderation_cmd.original_username}' → '{moderation_cmd.username}'")
                 
                 # Validate the command
                 is_valid, error_msg = self.command_processor.validate_command(moderation_cmd)
@@ -237,30 +237,40 @@ class WebAIModeratorBot:
                 keyword_index = command_text.find(Config.VOICE_ACTIVATION_KEYWORD)
                 actual_command = command_text[keyword_index + len(Config.VOICE_ACTIVATION_KEYWORD):].strip()
             
+            # Schedule the async command processing
+            self._schedule_coroutine(self._process_voice_command_async(actual_command, command_text))
+            
+        except Exception as e:
+            logger.error(f"Error in voice command handler: {e}")
+            self._schedule_coroutine(self.broadcast_message(f"❌ Error processing voice command: {e}"))
+    
+    async def _process_voice_command_async(self, actual_command: str, original_command: str):
+        """Process voice command asynchronously"""
+        try:
             # Process the command
-            moderation_cmd = self.command_processor.process_command(actual_command)
+            moderation_cmd = await self.command_processor.process_command(actual_command)
             
             if moderation_cmd:
-                # Show phonetic matching result if username was resolved
+                # Show AI matching result if username was resolved
                 if moderation_cmd.original_username and moderation_cmd.username != moderation_cmd.original_username:
-                    self._schedule_coroutine(self.broadcast_message(f"🔍 Phonetic match: '{moderation_cmd.original_username}' → '{moderation_cmd.username}'"))
+                    await self.broadcast_message(f"🔍 AI match: '{moderation_cmd.original_username}' → '{moderation_cmd.username}'")
                 
                 # Validate the command
                 is_valid, error_msg = self.command_processor.validate_command(moderation_cmd)
                 
                 if is_valid:
-                    self._schedule_coroutine(self._execute_command_async(moderation_cmd, command_text))
+                    await self._execute_command_async(moderation_cmd, original_command)
                 else:
-                    self._schedule_coroutine(self.broadcast_message(f"❌ Invalid command: {error_msg}"))
+                    await self.broadcast_message(f"❌ Invalid command: {error_msg}")
             else:
-                self._schedule_coroutine(self.broadcast_message(f"❓ Could not understand command: {actual_command}"))
+                await self.broadcast_message(f"❓ Could not understand command: {actual_command}")
             
             # Update status but don't broadcast it to reduce noise
-            self._schedule_coroutine(self.broadcast_status())
+            await self.broadcast_status()
             
         except Exception as e:
-            logger.error(f"Error in voice command handler: {e}")
-            self._schedule_coroutine(self.broadcast_message(f"❌ Error processing voice command: {e}"))
+            logger.error(f"Error processing voice command: {e}")
+            await self.broadcast_message(f"❌ Error processing voice command: {e}")
     
     async def _execute_command_async(self, cmd: ModerationCommand, original_command: str):
         """Execute a moderation command asynchronously"""

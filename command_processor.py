@@ -17,6 +17,7 @@ class ModerationCommand:
     additional_params: Optional[Dict] = None
     original_username: Optional[str] = None  # Store the original spoken username
     weather_location: Optional[str] = None  # Store weather location for weather commands
+    username_resolution_failed: bool = False  # Added for username resolution failure
 
 class CommandProcessor:
     def __init__(self, phonetic_helper=None):
@@ -32,9 +33,9 @@ class CommandProcessor:
         """Set the phonetic helper for username resolution"""
         self.phonetic_helper = phonetic_helper
     
-    def process_command(self, command_text: str) -> Optional[ModerationCommand]:
+    async def process_command(self, command_text: str) -> Optional[ModerationCommand]:
         """
-        Process a voice command using OpenAI API and phonetic username matching
+        Process a voice command using OpenAI API and AI-powered username matching
         
         Args:
             command_text: The recognized voice command text
@@ -52,9 +53,9 @@ class CommandProcessor:
         moderation_cmd = self._ai_process_command(command_text)
         
         if moderation_cmd and moderation_cmd.username:
-            # Try to resolve the username using phonetic matching
+            # Try to resolve the username using AI matching
             original_username = moderation_cmd.username
-            resolved_username = self._resolve_username(moderation_cmd.username)
+            resolved_username = await self._resolve_username(moderation_cmd.username)
             
             if resolved_username:
                 moderation_cmd.username = resolved_username
@@ -62,8 +63,8 @@ class CommandProcessor:
                 logger.info(f"Username resolved: '{original_username}' -> '{resolved_username}'")
             else:
                 logger.warning(f"Could not resolve username: '{original_username}'")
-                # Keep the original username but mark it as unresolved
-                moderation_cmd.original_username = original_username
+                # If username resolution fails, return None to prevent any action
+                return None
         
         if moderation_cmd:
             logger.info(f"Command processed: {moderation_cmd}")
@@ -72,14 +73,14 @@ class CommandProcessor:
             logger.warning(f"Could not process command: {command_text}")
             return None
     
-    def _resolve_username(self, spoken_username: str) -> Optional[str]:
-        """Resolve a spoken username using phonetic matching"""
+    async def _resolve_username(self, spoken_username: str) -> Optional[str]:
+        """Resolve a spoken username using AI matching"""
         if not self.phonetic_helper:
             logger.debug("No phonetic helper available, using original username")
             return spoken_username
         
         try:
-            resolved = self.phonetic_helper.resolve_username(spoken_username)
+            resolved = await self.phonetic_helper.resolve_username(spoken_username)
             return resolved if resolved else spoken_username
         except Exception as e:
             logger.error(f"Error resolving username '{spoken_username}': {e}")
@@ -110,6 +111,12 @@ class CommandProcessor:
             7. For unclear commands, use "unknown" action
             8. "slow" duration is chat delay in seconds between messages
             9. Only these actions can have durations: timeout, slow, followers_only
+            10. Handle common mishearings:
+                - "band" -> "ban"
+                - "bend" -> "ban"
+                - "bent" -> "ban"
+                - "un tie mount" -> "untimeout"
+            11. For "slow mode" without duration: use 10 seconds as default
             
             Command variations to recognize:
             - "ban", "permanently ban" -> ban (always permanent, duration = null)

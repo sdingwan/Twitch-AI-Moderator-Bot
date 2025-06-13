@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 from config import Config
 from command_processor import ModerationCommand
 from twitch_api import TwitchHelixAPI
+import pycountry
 
 logger = logging.getLogger(__name__)
 
@@ -55,6 +56,11 @@ class TwitchModeratorBot:
         
         try:
             success = False
+            
+            # If we have an original username but no resolved username, send error message
+            if cmd.original_username and not cmd.username:
+                await self.api.send_chat_message(f"❌ Cannot find user: {cmd.original_username}")
+                return False
             
             if cmd.action == 'ban':
                 success = await self.api.ban_user(cmd.username, cmd.reason)
@@ -175,6 +181,30 @@ class TwitchModeratorBot:
     async def _change_weather_location(self, location: str) -> bool:
         """Change the weather location by sending a command to chat"""
         try:
+            # Split location into city and country
+            parts = location.split(',')
+            if len(parts) >= 2:
+                city = parts[0].strip()
+                country = parts[1].strip()
+                
+                # Try to find the country code
+                try:
+                    # First try exact match
+                    country_obj = pycountry.countries.get(name=country)
+                    if not country_obj:
+                        # Try fuzzy search
+                        country_obj = pycountry.countries.search_fuzzy(country)[0]
+                    
+                    if country_obj:
+                        # Use alpha_2 code (e.g., 'US', 'IN', etc.)
+                        country = country_obj.alpha_2
+                except (LookupError, AttributeError):
+                    # If country not found, keep the original name
+                    logger.warning(f"Could not find country code for: {country}")
+                
+                # Reconstruct location with country code
+                location = f"{city}, {country}"
+            
             # Format the command to edit the !weather command with the new location
             weather_command = f'!command edit !weather ${{weather ${{1:|"{location}"}}}}'
             
