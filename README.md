@@ -62,9 +62,9 @@ The bot now includes a smart weather location feature that integrates with your 
 - `"Hey Brian, change weather to Naples, Italy"`
 - `"Hey Brian, set weather to Tokyo, Japan"`
 
-## 🔍 Smart Username Matching
+## 🤖 Smart AI Username Matching
 
-The bot now includes advanced phonetic matching to handle usernames with numbers and special characters:
+The bot now includes advanced AI-powered matching to handle usernames with numbers and special characters:
 
 **Examples:**
 - Say `"Hey Brian, ban viking king"` → Matches `V1king_k1ng`
@@ -72,11 +72,11 @@ The bot now includes advanced phonetic matching to handle usernames with numbers
 - Say `"Hey Brian, ban test user"` → Matches `TestUser123`
 
 **How it works:**
-- Monitors the last 30 chat messages automatically
-- Uses multiple phonetic algorithms (Soundex, Metaphone, Jaro-Winkler)
-- Handles leet speak (1→i, 3→e, 4→a, etc.)
-- Updates username log every 2 seconds
-- Shows phonetic matches in real-time
+- Monitors the last 50 chat messages automatically
+- Uses OpenAI/ChatGPT to intelligently match spoken names to usernames
+- Handles leet speak (1→i, 3→e, 4→a, etc.) and phonetic similarities
+- Updates username log every 0.3 seconds
+- Shows AI matches in real-time with 🤖 icon
 
 ## 🚀 Quick Start
 
@@ -178,7 +178,7 @@ Twitch-AI-Moderator-Bot/
 - All moderation actions are logged to `moderator_bot.log`
 - HTTP request logs are automatically suppressed for clean output
 - Voice activation keyword can be customized in the `.env` file
-- Phonetic matching threshold can be adjusted in the code (default: 0.5)
+- AI matching provides intelligent username resolution using ChatGPT
 - Web interface provides both voice and text command options
 
 ## 🆘 Troubleshooting
@@ -195,10 +195,11 @@ python main.py --list-mics  # Find your microphone index
 - Speak clearly and include "Hey Brian" before commands
 
 **Username not being matched?**
-- Make sure the user has chatted recently (last 30 messages)
+- Make sure the user has chatted recently (last 50 messages)
 - Try speaking the username more clearly
 - Check `chat_usernames.log` to see logged usernames
-- The bot shows phonetic matches in real-time
+- The bot shows AI matches in real-time with 🤖 icon
+- AI matching is more flexible than phonetic algorithms
 
 **Twitch commands failing?**
 - Verify your OAuth token has the correct scopes

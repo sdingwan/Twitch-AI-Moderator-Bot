@@ -23,7 +23,7 @@ from config import Config
 from voice_recognition_hf import VoiceRecognitionHF
 from command_processor import CommandProcessor, ModerationCommand
 from twitch_bot import TwitchModeratorBot
-from username_logger import UsernameLogger, PhoneticModerationHelper
+from username_logger import UsernameLogger, AIModerationHelper
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -56,7 +56,7 @@ class WebAIModeratorBot:
         self.command_processor = None
         self.twitch_bot = None
         self.username_logger = None
-        self.phonetic_helper = None
+        self.ai_helper = None
         self.is_running = False
         self.voice_active = False
         self.current_channel = None
@@ -88,8 +88,8 @@ class WebAIModeratorBot:
             
             # Initialize components
             self.username_logger = UsernameLogger(max_usernames=50, update_interval=0.5)
-            self.phonetic_helper = PhoneticModerationHelper(self.username_logger)
-            self.command_processor = CommandProcessor(phonetic_helper=self.phonetic_helper)
+            self.ai_helper = AIModerationHelper(self.username_logger)
+            self.command_processor = CommandProcessor(phonetic_helper=self.ai_helper)
             self.twitch_bot = TwitchModeratorBot(command_callback=self._on_command_executed)
             
             # Initialize voice recognition
@@ -202,9 +202,9 @@ class WebAIModeratorBot:
             moderation_cmd = self.command_processor.process_command(command_text)
             
             if moderation_cmd:
-                # Show phonetic matching result if username was resolved
+                # Show AI matching result if username was resolved
                 if moderation_cmd.original_username and moderation_cmd.username != moderation_cmd.original_username:
-                    await self.broadcast_message(f"🔍 Phonetic match: '{moderation_cmd.original_username}' → '{moderation_cmd.username}'")
+                    await self.broadcast_message(f"🤖 AI match: '{moderation_cmd.original_username}' → '{moderation_cmd.username}'")
                 
                 # Validate the command
                 is_valid, error_msg = self.command_processor.validate_command(moderation_cmd)
@@ -241,9 +241,9 @@ class WebAIModeratorBot:
             moderation_cmd = self.command_processor.process_command(actual_command)
             
             if moderation_cmd:
-                # Show phonetic matching result if username was resolved
+                # Show AI matching result if username was resolved
                 if moderation_cmd.original_username and moderation_cmd.username != moderation_cmd.original_username:
-                    self._schedule_coroutine(self.broadcast_message(f"🔍 Phonetic match: '{moderation_cmd.original_username}' → '{moderation_cmd.username}'"))
+                    self._schedule_coroutine(self.broadcast_message(f"🤖 AI match: '{moderation_cmd.original_username}' → '{moderation_cmd.username}'"))
                 
                 # Validate the command
                 is_valid, error_msg = self.command_processor.validate_command(moderation_cmd)

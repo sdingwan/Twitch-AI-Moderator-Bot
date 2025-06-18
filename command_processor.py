@@ -73,9 +73,9 @@ class CommandProcessor:
             return None
     
     def _resolve_username(self, spoken_username: str) -> Optional[str]:
-        """Resolve a spoken username using phonetic matching"""
+        """Resolve a spoken username using AI matching"""
         if not self.phonetic_helper:
-            logger.debug("No phonetic helper available, using original username")
+            logger.debug("No AI username helper available, using original username")
             return spoken_username
         
         try:
@@ -103,13 +103,14 @@ class CommandProcessor:
             Rules for parsing:
             1. BANS are PERMANENT - never set duration for "ban" action, always null
             2. For "timeout" without duration: use {Config.DEFAULT_BAN_DURATION} seconds
-            3. For "followers_only" default duration is 1 second. Otherwise, use the duration provided.
-            4. Convert time units: minutes->seconds (*60), hours->seconds (*3600), days->seconds (*86400)
-            5. Clean usernames: lowercase, no spaces, alphanumeric + underscore only
-            6. Pay attention to opposite actions: "unban" vs "ban", "untimeout" vs "timeout", etc.
-            7. For unclear commands, use "unknown" action
-            8. "slow" duration is chat delay in seconds between messages
+            3. For "slow mode" without duration: use 10 seconds as default
+            4. For "followers_only" default duration is 1 second. Otherwise, use the duration provided.
+            5. Convert time units: minutes->seconds (*60), hours->seconds (*3600), days->seconds (*86400)
+            6. Clean usernames: lowercase, no spaces, alphanumeric + underscore only
+            7. Pay attention to opposite actions: "unban" vs "ban", "untimeout" vs "timeout", etc.
+            8. For unclear commands, use "unknown" action
             9. Only these actions can have durations: timeout, slow, followers_only
+            10. Always convert weather country to abbreviation. Example: "United States" -> "US" or "United Kingdom" -> "UK" or "Italy" -> "IT"
             
             Command variations to recognize:
             - "ban", "permanently ban" -> ban (always permanent, duration = null)
@@ -135,6 +136,7 @@ class CommandProcessor:
             "unban johndoe" -> {{"action": "unban", "username": "johndoe", "duration": null, "reason": null}}
             "untimeout user123" -> {{"action": "untimeout", "username": "user123", "duration": null, "reason": null}}
             "clear the chat" -> {{"action": "clear", "username": null, "duration": null, "reason": null}}
+            "slow mode" -> {{"action": "slow", "username": null, "duration": 10, "reason": null}}
             "slow mode 30 seconds" -> {{"action": "slow", "username": null, "duration": 30, "reason": null}}
             "disable slow mode" -> {{"action": "slow_off", "username": null, "duration": null, "reason": null}}
             "followers only 10 minutes" -> {{"action": "followers_only", "username": null, "duration": 600, "reason": null}}
@@ -150,9 +152,8 @@ class CommandProcessor:
             "turn off emote only" -> {{"action": "emote_off", "username": null, "duration": null, "reason": null, "weather_location": null}}
             "restrict baduser" -> {{"action": "restrict", "username": "baduser", "duration": null, "reason": null, "weather_location": null}}
             "unrestrict gooduser" -> {{"action": "unrestrict", "username": "gooduser", "duration": null, "reason": null, "weather_location": null}}
-            "change weather to Naples, Italy" -> {{"action": "weather", "username": null, "duration": null, "reason": null, "weather_location": "Naples, Italy"}}
-            "set weather to Tokyo, Japan" -> {{"action": "weather", "username": null, "duration": null, "reason": null, "weather_location": "Tokyo, Japan"}}
-            "weather location London, UK" -> {{"action": "weather", "username": null, "duration": null, "reason": null, "weather_location": "London, UK"}}
+            "change weather to Naples, Italy" -> {{"action": "weather", "username": null, "duration": null, "reason": null, "weather_location": "Naples, IT"}}
+            "set weather to Tokyo, Japan" -> {{"action": "weather", "username": null, "duration": null, "reason": null, "weather_location": "Tokyo, JP"}}
             
             Respond with ONLY the JSON object, no other text.
             """
@@ -180,6 +181,12 @@ class CommandProcessor:
                         reason=parsed.get('reason'),
                         weather_location=parsed.get('weather_location')
                     )
+                    
+                    # Post-process: Ensure slow mode always has a duration (default 10 seconds)
+                    if cmd.action == 'slow' and cmd.duration is None:
+                        cmd.duration = 10
+                        logger.debug(f"Applied default slow mode duration: 10 seconds")
+                    
                     logger.debug(f"Created command object: {cmd}")
                     return cmd
                 else:

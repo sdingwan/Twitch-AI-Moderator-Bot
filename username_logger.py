@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Username Logger and Phonetic Matcher for Twitch Chat
-Monitors Twitch IRC chat, logs usernames, and provides phonetic matching for voice commands
+Username Logger and AI-based Matcher for Twitch Chat
+Monitors Twitch IRC chat, logs usernames, and provides AI-powered matching for voice commands
 """
 
 import asyncio
@@ -13,8 +13,7 @@ import ssl
 from datetime import datetime, timedelta
 from typing import List, Dict, Optional, Tuple
 from collections import deque
-import jellyfish
-from phonetics import dmetaphone, soundex
+from openai import OpenAI
 from config import Config
 
 logger = logging.getLogger(__name__)
@@ -49,6 +48,13 @@ class UsernameLogger:
             self.oauth_token_for_irc = f"oauth:{self.oauth_token}"
         else:
             self.oauth_token_for_irc = self.oauth_token
+        
+        # Initialize OpenAI client for AI-based username matching
+        self.openai_client = None
+        if Config.OPENAI_API_KEY:
+            self.openai_client = OpenAI(api_key=Config.OPENAI_API_KEY)
+        else:
+            logger.warning("OpenAI API key not found. AI username matching will not work.")
         
         # Ensure log file exists
         self._initialize_log_file()
@@ -190,135 +196,101 @@ class UsernameLogger:
         """Get list of recent usernames"""
         return [entry['username'] for entry in self.usernames]
     
-    def find_phonetically_similar_username(self, spoken_name: str, threshold: float = 0.6) -> Optional[Tuple[str, float]]:
+    def find_ai_similar_username(self, spoken_name: str) -> Optional[Tuple[str, str]]:
         """
-        Find the most phonetically similar username to the spoken name
+        Use OpenAI to find the best matching username from recent chat
         
         Args:
             spoken_name: The name as spoken/recognized by voice
-            threshold: Minimum similarity score (0.0 to 1.0)
             
         Returns:
-            Tuple of (best_match_username, similarity_score) or None if no good match
+            Tuple of (best_match_username, reasoning) or None if no good match
         """
         if not self.usernames:
-            logger.warning("No usernames available for phonetic matching")
+            logger.warning("No usernames available for AI matching")
+            return None
+            
+        if not self.openai_client:
+            logger.error("OpenAI client not available for username matching")
             return None
         
         spoken_name = spoken_name.lower().strip()
         recent_usernames = self.get_recent_usernames()
         
-        logger.info(f"Searching for phonetic match for '{spoken_name}' among {len(recent_usernames)} usernames")
+        logger.info(f"Using AI to match '{spoken_name}' among {len(recent_usernames)} usernames")
         
-        best_match = None
-        best_score = 0.0
-        
-        for username in recent_usernames:
-            # Calculate multiple phonetic similarity scores
-            scores = []
+        try:
+            # Create a prompt for OpenAI to match usernames
+            username_list = "\n".join([f"- {username}" for username in recent_usernames])
             
-            # Use both original and cleaned versions for comparison
-            spoken_clean = self._clean_for_phonetic(spoken_name)
-            username_clean = self._clean_for_phonetic(username)
+            prompt = f"""You are helping match a spoken username to an actual Twitch username from recent chat.
+
+Spoken username: "{spoken_name}"
+
+Recent chat usernames:
+{username_list}
+
+Please find the best matching username from the list above. Consider:
+- Phonetic similarity (how it sounds when spoken)
+- Leet speak (1=i, 3=e, 4=a, 5=s, 7=t, 0=o)
+- Common misspellings or voice recognition errors
+- Underscores, numbers, and special characters that might be omitted when speaking
+- Case variations
+
+If you find a good match, respond with ONLY the exact username from the list.
+If no reasonable match exists, respond with "NO_MATCH".
+
+Examples:
+- "viking king" might match "V1king_k1ng" or "VikingKing123"
+- "test user" might match "TestUser" or "test_user_42"
+- "john smith" might match "johnsmith2024" or "john_smith_"
+
+Your response:"""
+
+            response = self.openai_client.chat.completions.create(
+                model="gpt-3.5-turbo",
+                messages=[
+                    {"role": "system", "content": "You are a username matching expert. Be precise and only return exact usernames from the provided list or 'NO_MATCH'."},
+                    {"role": "user", "content": prompt}
+                ],
+                max_tokens=50,
+                temperature=0.1  # Low temperature for consistent results
+            )
             
-            # 1. Jaro-Winkler similarity on original strings
-            jaro_original = jellyfish.jaro_winkler_similarity(spoken_name, username)
-            scores.append(jaro_original)
+            ai_response = response.choices[0].message.content.strip()
             
-            # 2. Jaro-Winkler similarity on cleaned strings
-            jaro_clean = jellyfish.jaro_winkler_similarity(spoken_clean, username_clean)
-            scores.append(jaro_clean)
+            # Check if AI found a match
+            if ai_response == "NO_MATCH" or not ai_response:
+                logger.info(f"AI found no match for '{spoken_name}'")
+                return None
             
-            # 3. Levenshtein distance converted to similarity (original)
-            lev_distance = jellyfish.levenshtein_distance(spoken_name, username)
-            max_len = max(len(spoken_name), len(username))
-            lev_similarity = 1.0 - (lev_distance / max_len) if max_len > 0 else 0.0
-            scores.append(lev_similarity)
-            
-            # 4. Soundex comparison (cleaned)
-            try:
-                spoken_soundex = jellyfish.soundex(spoken_clean)
-                username_soundex = jellyfish.soundex(username_clean)
-                soundex_match = 1.0 if spoken_soundex == username_soundex else 0.0
-                scores.append(soundex_match)
-            except:
-                scores.append(0.0)
-            
-            # 5. Metaphone comparison (cleaned)
-            try:
-                spoken_metaphone = jellyfish.metaphone(spoken_clean)
-                username_metaphone = jellyfish.metaphone(username_clean)
-                metaphone_match = 1.0 if spoken_metaphone == username_metaphone else 0.0
-                scores.append(metaphone_match)
-            except:
-                scores.append(0.0)
-            
-            # 6. Double Metaphone comparison (cleaned)
-            try:
-                spoken_dmetaphone = dmetaphone(spoken_clean)
-                username_dmetaphone = dmetaphone(username_clean)
-                # Check if any of the double metaphone codes match
-                dmetaphone_match = 0.0
-                for s_code in spoken_dmetaphone:
-                    for u_code in username_dmetaphone:
-                        if s_code and u_code and s_code == u_code:
-                            dmetaphone_match = 1.0
-                            break
-                    if dmetaphone_match > 0:
-                        break
-                scores.append(dmetaphone_match)
-            except:
-                scores.append(0.0)
-            
-            # Calculate weighted average score
-            # Give more weight to Jaro-Winkler scores
-            weights = [0.3, 0.3, 0.2, 0.1, 0.05, 0.05][:len(scores)]
-            weighted_score = sum(score * weight for score, weight in zip(scores, weights))
-            
-            logger.debug(f"Username '{username}' scores: {scores}, weighted: {weighted_score:.3f}")
-            
-            if weighted_score > best_score:
-                best_score = weighted_score
-                best_match = username
-        
-        if best_match and best_score >= threshold:
-            logger.info(f"Found phonetic match: '{spoken_name}' -> '{best_match}' (score: {best_score:.3f})")
-            return best_match, best_score
-        else:
-            logger.info(f"No phonetic match found for '{spoken_name}' (best score: {best_score:.3f}, threshold: {threshold})")
+            # Verify the AI response is actually in our username list
+            if ai_response.lower() in [u.lower() for u in recent_usernames]:
+                # Find the exact case-sensitive match
+                matched_username = next(u for u in recent_usernames if u.lower() == ai_response.lower())
+                logger.info(f"AI matched '{spoken_name}' -> '{matched_username}'")
+                return matched_username, f"AI matched based on phonetic similarity and patterns"
+            else:
+                logger.warning(f"AI returned invalid username: '{ai_response}' not in recent chat")
+                return None
+                
+        except Exception as e:
+            logger.error(f"Error using AI for username matching: {e}")
             return None
-    
-    def _clean_for_phonetic(self, text: str) -> str:
-        """Clean text for better phonetic matching by normalizing numbers and special characters"""
-        import re
-        
-        # More conservative number replacement - only replace when they're likely to be pronounced
-        # Replace common leet speak patterns
-        text = text.replace('1', 'i').replace('3', 'e').replace('4', 'a')
-        text = text.replace('5', 's').replace('7', 't').replace('0', 'o')
-        
-        # Remove or replace special characters with spaces
-        text = text.replace('_', ' ').replace('-', ' ').replace('.', ' ')
-        
-        # Remove extra spaces and normalize
-        text = re.sub(r'\s+', ' ', text).strip()
-        
-        return text
 
 
-class PhoneticModerationHelper:
-    """Helper class to integrate phonetic username matching with moderation commands"""
+class AIModerationHelper:
+    """Helper class to integrate AI username matching with moderation commands"""
     
     def __init__(self, username_logger: UsernameLogger):
         self.username_logger = username_logger
     
-    def resolve_username(self, spoken_username: str, threshold: float = 0.5) -> Optional[str]:
+    def resolve_username(self, spoken_username: str) -> Optional[str]:
         """
-        Resolve a spoken username to an actual username from chat
+        Resolve a spoken username to an actual username from chat using AI
         
         Args:
             spoken_username: Username as recognized by voice
-            threshold: Minimum similarity threshold (lowered to 0.5 for better matching)
             
         Returns:
             Resolved username or None if no match found
@@ -332,11 +304,11 @@ class PhoneticModerationHelper:
                 logger.info(f"Exact match found: '{spoken_username}' -> '{username}'")
                 return username
         
-        # If no exact match, try phonetic matching
-        result = self.username_logger.find_phonetically_similar_username(spoken_username, threshold)
+        # If no exact match, try AI matching
+        result = self.username_logger.find_ai_similar_username(spoken_username)
         if result:
-            matched_username, score = result
-            logger.info(f"Phonetic match: '{spoken_username}' -> '{matched_username}' (score: {score:.3f})")
+            matched_username, reasoning = result
+            logger.info(f"AI match: '{spoken_username}' -> '{matched_username}' ({reasoning})")
             return matched_username
         
         logger.warning(f"No username match found for: '{spoken_username}'")

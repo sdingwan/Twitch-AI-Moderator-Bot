@@ -271,7 +271,7 @@ class VoiceRecognitionHF:
         min_audio_length = self.sample_rate * 2  # 2 seconds minimum
         max_audio_length = self.sample_rate * 8  # 8 seconds maximum
         silence_duration = 0
-        max_silence = self.sample_rate * 3  # 3 seconds of silence to trigger processing
+        max_silence = self.sample_rate * 2  # 2 seconds of silence to trigger processing
         
         while self.is_listening:
             try:
