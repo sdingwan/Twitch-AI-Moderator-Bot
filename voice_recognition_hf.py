@@ -10,11 +10,9 @@ import os
 import requests
 import subprocess
 import asyncio
-from typing import Optional, Callable, List, Dict
+from typing import Optional, Callable
 from config import Config
 from datetime import datetime
-from collections import deque
-from openai import OpenAI
 
 logger = logging.getLogger(__name__)
 
@@ -44,17 +42,6 @@ class VoiceRecognitionHF:
         # Transcription logging
         self.transcription_log_file = "stream_transcription.log"
         self._setup_transcription_logging()
-        
-        # Multi-segment command processing
-        self.recent_segments = deque(maxlen=4)  # Keep last 4 transcribed segments
-        self.segment_timestamps = deque(maxlen=4)  # Keep timestamps for each segment
-        
-        # Initialize OpenAI client for command assembly
-        self.openai_client = None
-        if Config.OPENAI_API_KEY:
-            self.openai_client = OpenAI(api_key=Config.OPENAI_API_KEY)
-        else:
-            logger.warning("OpenAI API key not found. Multi-segment command processing will not work.")
         
         # Initialize Hugging Face Inference Endpoint
         self._setup_hf_endpoint()
@@ -282,9 +269,9 @@ class VoiceRecognitionHF:
         audio_buffer = []
         silence_threshold = 1000  # Higher threshold to reduce false triggers
         min_audio_length = self.sample_rate * 2  # 2 seconds minimum
-        max_audio_length = self.sample_rate * 6  # 8 seconds maximum
+        max_audio_length = self.sample_rate * 8  # 8 seconds maximum
         silence_duration = 0
-        max_silence = self.sample_rate * 1.5  # 2 seconds of silence to trigger processing
+        max_silence = self.sample_rate * 2  # 2 seconds of silence to trigger processing
         
         while self.is_listening:
             try:
@@ -329,51 +316,6 @@ class VoiceRecognitionHF:
                 logger.error(f"Error in audio processing loop: {e}")
                 time.sleep(0.1)
     
-    def _is_gibberish(self, text: str) -> bool:
-        """
-        Filter out gibberish, short fragments, and meaningless transcriptions
-        """
-        # If filtering is disabled, never filter
-        if not Config.ENABLE_GIBBERISH_FILTERING:
-            return False
-            
-        if not text or not text.strip():
-            return True
-        
-        text = text.strip().lower()
-        
-        # Too short (configurable minimum length)
-        if len(text) < Config.MIN_SEGMENT_LENGTH:
-            return True
-        
-        # Common gibberish patterns
-        gibberish_patterns = [
-            # Single repeated words
-            r'^(you|thank you|thanks|lol|uh|um|ah|oh|yeah|yes|no|okay|ok)$',
-            # Very short words (1-2 chars) unless they're commands
-            r'^[a-z]{1,2}$',
-            # Just punctuation or numbers
-            r'^[^a-z]*$',
-            # Repeated characters
-            r'^(.)\1{3,}$',
-            # Common filler words
-            r'^(like|well|so|and|but|the|a|an|is|was|are|were|will|would|could|should)$'
-        ]
-        
-        import re
-        for pattern in gibberish_patterns:
-            if re.match(pattern, text):
-                return True
-        
-        # Check if it's just a single word that's very common and short
-        words = text.split()
-        if len(words) == 1 and len(text) <= 4 and text not in [Config.VOICE_ACTIVATION_KEYWORD]:
-            common_short_words = ['you', 'me', 'my', 'we', 'us', 'he', 'she', 'it', 'they', 'this', 'that', 'here', 'there', 'now', 'then', 'what', 'when', 'where', 'why', 'how', 'who', 'much', 'many', 'some', 'all', 'any', 'each', 'both', 'more', 'most', 'few', 'less', 'same', 'new', 'old', 'good', 'bad', 'big', 'small']
-            if text in common_short_words:
-                return True
-        
-        return False
-    
     def _transcribe_audio(self, audio_chunks):
         """Transcribe audio using Hugging Face Inference Endpoint"""
         try:
@@ -408,162 +350,26 @@ class VoiceRecognitionHF:
                 text = result.get('text', '').strip().lower()
                 
                 if text:
-                    # Check if this is gibberish
-                    is_gibberish = self._is_gibberish(text)
+                    # Log ALL transcribed text to file (real-time streamer speech)
+                    self._log_transcription(text)
                     
-                    # Log transcription (filter if enabled)
-                    if not is_gibberish or not Config.FILTER_TRANSCRIPTION_LOG:
-                        self._log_transcription(text)
-                    else:
-                        logger.debug(f"Filtered gibberish from log: '{text}'")
-                    
-                    # Process for commands (always filter gibberish here)
-                    if not is_gibberish:
-                        # Add to recent segments for multi-segment processing
-                        current_time = time.time()
-                        self.recent_segments.append(text)
-                        self.segment_timestamps.append(current_time)
+                    # Check if the activation keyword is present for commands
+                    if Config.VOICE_ACTIVATION_KEYWORD in text:
+                        # Extract command after the activation keyword
+                        keyword_index = text.find(Config.VOICE_ACTIVATION_KEYWORD)
+                        command = text[keyword_index + len(Config.VOICE_ACTIVATION_KEYWORD):].strip()
                         
-                        # Check for commands using multi-segment analysis
-                        self._process_multi_segment_commands()
-                    else:
-                        logger.debug(f"Filtered gibberish from processing: '{text}'")
-                    
+                        if command:
+                            logger.info(f"🎯 Voice command detected: {command}")
+                            # Pass the full text including "Hey Brian" to the callback
+                            self.command_callback(text)
+                        else:
+                            logger.debug("Activation keyword detected but no command found")
             else:
                 logger.error(f"HF Endpoint error: {response.status_code} - {response.text}")
             
         except Exception as e:
             logger.error(f"Error transcribing audio with HF endpoint: {e}")
-    
-    def _process_multi_segment_commands(self):
-        """Process commands across multiple segments using AI"""
-        try:
-            if not self.openai_client:
-                # Fallback to single-segment processing
-                self._fallback_single_segment_processing()
-                return
-            
-            # Only process if we have segments and the most recent one is within 10 seconds
-            if not self.recent_segments:
-                return
-                
-            current_time = time.time()
-            if current_time - self.segment_timestamps[-1] > 10:
-                return  # Too old, ignore
-            
-            # Filter out any remaining gibberish from segments before analysis
-            # (Keep wake word segments even if they might seem like gibberish)
-            filtered_segments = []
-            for segment in self.recent_segments:
-                if Config.VOICE_ACTIVATION_KEYWORD in segment or not self._is_gibberish(segment):
-                    filtered_segments.append(segment)
-            
-            if not filtered_segments:
-                return  # No meaningful segments
-            
-            # Check if any segment contains the wake word
-            has_wake_word = any(Config.VOICE_ACTIVATION_KEYWORD in segment for segment in filtered_segments)
-            
-            if not has_wake_word:
-                return  # No wake word found, skip processing
-            
-            # Use AI to analyze the filtered segments for commands
-            detected_command = self._ai_analyze_segments(filtered_segments)
-            
-            if detected_command:
-                logger.info(f"🎯 Multi-segment command detected: {detected_command}")
-                self.command_callback(detected_command)
-                
-                # Clear recent segments after successful command processing
-                self.recent_segments.clear()
-                self.segment_timestamps.clear()
-                
-        except Exception as e:
-            logger.error(f"Error in multi-segment command processing: {e}")
-            # Fallback to single-segment processing
-            self._fallback_single_segment_processing()
-    
-    def _ai_analyze_segments(self, segments: List[str]) -> Optional[str]:
-        """Use AI to analyze multiple segments and extract complete commands"""
-        try:
-            # Prepare segments for analysis
-            segments_formatted = []
-            for i, segment in enumerate(segments, 1):
-                segments_formatted.append(f"Segment {i}: \"{segment}\"")
-            
-            segments_text = "\n".join(segments_formatted)
-            
-            prompt = f"""You are analyzing voice transcription segments that may contain a split voice command for a Twitch moderation bot.
-
-Recent transcription segments (in chronological order):
-{segments_text}
-
-The voice activation keyword is "{Config.VOICE_ACTIVATION_KEYWORD}".
-
-Your task:
-1. Look for voice commands that start with "{Config.VOICE_ACTIVATION_KEYWORD}"
-2. Determine if segments form a complete command when combined
-3. Handle cases where commands are split across segments due to pauses
-4. Extract the most complete and recent command
-
-Rules:
-- Commands may be split due to natural speech pauses
-- Look for patterns like "hey brian set weather to go" + "reme turkey" = "hey brian set weather to goreme turkey"
-- Prioritize the most recent complete command
-- Ignore unrelated conversation or incomplete fragments
-- Only return commands that start with the activation keyword
-
-Examples of what to look for:
-- Weather commands: "set weather to [location]", "change weather to [location]"
-- Moderation commands: "ban [user]", "timeout [user]", "clear chat"
-- Mode commands: "slow mode", "followers only", "subscribers only"
-
-If you find a complete command, respond with ONLY the complete command text starting with "{Config.VOICE_ACTIVATION_KEYWORD}".
-If no complete command is found, respond with "NO_COMMAND".
-
-Response:"""
-
-            response = self.openai_client.chat.completions.create(
-                model="gpt-3.5-turbo",
-                messages=[
-                    {"role": "system", "content": "You are a voice command analyzer for a Twitch moderation bot. Extract complete commands from transcription segments."},
-                    {"role": "user", "content": prompt}
-                ],
-                max_tokens=100,
-                temperature=0.1
-            )
-            
-            ai_response = response.choices[0].message.content.strip()
-            
-            if ai_response and ai_response != "NO_COMMAND" and Config.VOICE_ACTIVATION_KEYWORD in ai_response.lower():
-                # Clean up the response
-                cleaned_command = ai_response.lower().strip()
-                logger.info(f"🤖 AI assembled command from {len(segments)} segments: {cleaned_command}")
-                return cleaned_command
-            else:
-                logger.debug(f"AI found no complete command in segments: {ai_response}")
-                return None
-                
-        except Exception as e:
-            logger.error(f"Error in AI segment analysis: {e}")
-            return None
-    
-    def _fallback_single_segment_processing(self):
-        """Fallback to original single-segment processing"""
-        if not self.recent_segments:
-            return
-            
-        # Process only the most recent segment that contains the wake word
-        for segment in reversed(self.recent_segments):
-            if Config.VOICE_ACTIVATION_KEYWORD in segment:
-                # Extract command after the activation keyword
-                keyword_index = segment.find(Config.VOICE_ACTIVATION_KEYWORD)
-                command = segment[keyword_index + len(Config.VOICE_ACTIVATION_KEYWORD):].strip()
-                
-                if command:
-                    logger.info(f"🎯 Fallback single-segment command: {command}")
-                    self.command_callback(segment)
-                    break
     
     def __del__(self):
         """Cleanup when object is destroyed"""

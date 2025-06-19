@@ -27,11 +27,6 @@ class Config:
     # Transcription Logging
     ENABLE_TRANSCRIPTION_LOGGING = os.getenv('ENABLE_TRANSCRIPTION_LOGGING', 'true').lower() == 'true'
     
-    # Gibberish Filtering
-    ENABLE_GIBBERISH_FILTERING = os.getenv('ENABLE_GIBBERISH_FILTERING', 'true').lower() == 'true'
-    FILTER_TRANSCRIPTION_LOG = os.getenv('FILTER_TRANSCRIPTION_LOG', 'true').lower() == 'true'  # Also filter log file
-    MIN_SEGMENT_LENGTH = int(os.getenv('MIN_SEGMENT_LENGTH', 2))  # Minimum characters for valid segments
-    
     # Moderation Settings
     DEFAULT_BAN_DURATION = int(os.getenv('DEFAULT_BAN_DURATION', 600))  # 10 minutes
     MAX_BAN_DURATION = int(os.getenv('MAX_BAN_DURATION', 86400))  # 24 hours
