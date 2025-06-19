@@ -27,6 +27,11 @@ class Config:
     # Transcription Logging
     ENABLE_TRANSCRIPTION_LOGGING = os.getenv('ENABLE_TRANSCRIPTION_LOGGING', 'true').lower() == 'true'
     
+    # Voice Activity Detection Settings
+    VOICE_SILENCE_THRESHOLD = int(os.getenv('VOICE_SILENCE_THRESHOLD', 1500))
+    VOICE_MIN_SPEECH_CHUNKS = int(os.getenv('VOICE_MIN_SPEECH_CHUNKS', 8))
+    VOICE_NO_SPEECH_THRESHOLD = float(os.getenv('VOICE_NO_SPEECH_THRESHOLD', 0.6))
+    
     # Moderation Settings
     DEFAULT_BAN_DURATION = int(os.getenv('DEFAULT_BAN_DURATION', 600))  # 10 minutes
     MAX_BAN_DURATION = int(os.getenv('MAX_BAN_DURATION', 86400))  # 24 hours
