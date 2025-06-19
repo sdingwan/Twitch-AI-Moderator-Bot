@@ -113,9 +113,10 @@ class CommandProcessor:
             10. Always convert weather country to abbreviation. Example: "United States" -> "US" or "United Kingdom" -> "UK" or "Italy" -> "IT"
             
             Command variations to recognize:
-            - "ban", "permanently ban" -> ban (always permanent, duration = null)
+            - "ban", "permanently ban", "band", "bend" -> ban (always permanent, duration = null)
             - "timeout", "mute" -> timeout (with duration)
-            - "unban", "untimeout", "unmute" -> remove timeout/ban
+            - "unban", "unben" -> remove ban
+            - "untimeout", "un tie mount", "remove timeout" -> remove timeout
             - "clear chat", "clear the chat" -> clear
             - "slow mode", "enable slow mode" -> slow
             - "disable slow mode", "turn off slow mode", "slow off" -> slow_off
@@ -142,6 +143,7 @@ class CommandProcessor:
             "followers only 10 minutes" -> {{"action": "followers_only", "username": null, "duration": 600, "reason": null}}
             "followers only mode" -> {{"action": "followers_only", "username": null, "duration": 1, "reason": null}}
             "turn off followers only" -> {{"action": "followers_off", "username": null, "duration": null, "reason": null}}
+            "remove followers only" -> {{"action": "followers_off", "username": null, "duration": null, "reason": null}}
             "subscribers only" -> {{"action": "subscribers_only", "username": null, "duration": null, "reason": null}}
             "sub only" -> {{"action": "subscribers_only", "username": null, "duration": null, "reason": null}}
             "subs only mode" -> {{"action": "subscribers_only", "username": null, "duration": null, "reason": null}}
