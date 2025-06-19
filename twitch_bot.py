@@ -164,6 +164,15 @@ class TwitchModeratorBot:
         except Exception as e:
             logger.error(f"Failed to send status message: {e}")
     
+    async def send_username_not_found_message(self, spoken_username: str, action: str):
+        """Send message to chat when username cannot be found for moderation"""
+        try:
+            message = f"⚠️ Cannot {action} '{spoken_username}' - user not found in recent chat."
+            await self.api.send_chat_message(message)
+            logger.info(f"Sent username not found message to chat: {message}")
+        except Exception as e:
+            logger.error(f"Failed to send username not found message: {e}")
+    
     async def get_moderators(self) -> List[Dict]:
         """Get list of channel moderators"""
         try:

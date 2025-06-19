@@ -17,6 +17,7 @@ class ModerationCommand:
     additional_params: Optional[Dict] = None
     original_username: Optional[str] = None  # Store the original spoken username
     weather_location: Optional[str] = None  # Store weather location for weather commands
+    username_resolved: bool = False  # Track if username was successfully resolved from recent chat
 
 class CommandProcessor:
     def __init__(self, phonetic_helper=None):
@@ -56,14 +57,22 @@ class CommandProcessor:
             original_username = moderation_cmd.username
             resolved_username = self._resolve_username(moderation_cmd.username)
             
-            if resolved_username:
+            if resolved_username and resolved_username != original_username:
+                # Username was successfully resolved from recent chat
                 moderation_cmd.username = resolved_username
                 moderation_cmd.original_username = original_username
+                moderation_cmd.username_resolved = True
                 logger.info(f"Username resolved: '{original_username}' -> '{resolved_username}'")
+            elif resolved_username == original_username:
+                # Exact match found in recent chat
+                moderation_cmd.username_resolved = True
+                logger.info(f"Exact username match found in recent chat: '{original_username}'")
             else:
-                logger.warning(f"Could not resolve username: '{original_username}'")
-                # Keep the original username but mark it as unresolved
+                # Username could not be resolved from recent chat
+                logger.warning(f"Could not resolve username from recent chat: '{original_username}'")
                 moderation_cmd.original_username = original_username
+                moderation_cmd.username_resolved = False
+                # Keep the original username for validation to catch this as an error
         
         if moderation_cmd:
             logger.info(f"Command processed: {moderation_cmd}")
@@ -75,15 +84,15 @@ class CommandProcessor:
     def _resolve_username(self, spoken_username: str) -> Optional[str]:
         """Resolve a spoken username using AI matching"""
         if not self.phonetic_helper:
-            logger.debug("No AI username helper available, using original username")
-            return spoken_username
+            logger.debug("No AI username helper available, cannot verify username from recent chat")
+            return None
         
         try:
             resolved = self.phonetic_helper.resolve_username(spoken_username)
-            return resolved if resolved else spoken_username
+            return resolved
         except Exception as e:
             logger.error(f"Error resolving username '{spoken_username}': {e}")
-            return spoken_username
+            return None
     
     def _ai_process_command(self, command_text: str) -> Optional[ModerationCommand]:
         """Use OpenAI to process all commands"""
@@ -215,6 +224,9 @@ class CommandProcessor:
         # Commands that require a username
         user_required_actions = ['ban', 'unban', 'timeout', 'untimeout', 'restrict', 'unrestrict']
         
+        # Commands that pose danger if username is not verified (can affect innocent users)
+        dangerous_actions = ['ban', 'timeout', 'restrict']
+        
         # Commands that require a weather location
         weather_required_actions = ['weather']
         
@@ -224,6 +236,12 @@ class CommandProcessor:
         # Validate username for user-specific actions
         if cmd.action in user_required_actions and not cmd.username:
             return False, f"Username required for {cmd.action} action"
+        
+        # SAFETY CHECK: For dangerous actions, username must be resolved from recent chat
+        if cmd.action in dangerous_actions and cmd.username:
+            if not cmd.username_resolved:
+                original = cmd.original_username or cmd.username
+                return False, f"Cannot {cmd.action} user '{original}' - username not found in recent chat. Only users who have recently chatted can be moderated for safety."
         
         # Validate weather location for weather actions
         if cmd.action in weather_required_actions and not cmd.weather_location:
