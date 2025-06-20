@@ -1,4 +1,5 @@
 import os
+import re
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -68,4 +69,34 @@ class Config:
         if not cls.TWITCH_CHANNEL:
             raise ValueError("Twitch channel not set. Please specify a channel.")
         
-        return True 
+        return True
+    
+    @classmethod
+    def find_activation_keyword(cls, text: str) -> tuple[bool, int, int]:
+        """
+        Find activation keyword in text with flexible matching for punctuation variations.
+        
+        Returns:
+            (found, start_index, end_index) - end_index is exclusive
+        """
+        # Create regex pattern that matches "hey" followed by optional punctuation/spaces, then "brian"
+        # This will match: "hey brian", "hey, brian", "hey, brian.", "hey brian!", etc.
+        pattern = r'\b' + re.escape("hey") + r'[,\s]*' + re.escape("brian") + r'[!\.\?]*\b'
+        
+        match = re.search(pattern, text.lower())
+        if match:
+            return True, match.start(), match.end()
+        
+        return False, -1, -1
+    
+    @classmethod
+    def extract_command_after_keyword(cls, text: str) -> str:
+        """Extract command text after the activation keyword, handling punctuation variations."""
+        found, start_idx, end_idx = cls.find_activation_keyword(text)
+        if found:
+            # Extract everything after the activation keyword match
+            command_part = text[end_idx:].strip()
+            # Remove leading punctuation/connectors like "." "," etc.
+            command_part = re.sub(r'^[,\.\!\?\s]+', '', command_part)
+            return command_part
+        return text 

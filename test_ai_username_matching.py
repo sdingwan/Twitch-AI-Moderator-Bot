@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Test Script for AI Username Matching
-Interactive tool to test AI-powered username matching against recent chat usernames
+Test Script for Hybrid Username Matching
+Interactive tool to test hybrid phonetic + AI username matching against recent chat usernames
 """
 
 import os
@@ -74,12 +74,16 @@ class TestUsernameLogger(UsernameLogger):
 
 def print_banner():
     """Print the test banner"""
-    print("=" * 60)
-    print("🤖 AI USERNAME MATCHING TEST TOOL")
-    print("=" * 60)
-    print("This tool tests the AI-powered username matching system.")
-    print("You can enter spoken usernames and see how the AI matches them.")
-    print("=" * 60)
+    print("=" * 70)
+    print("🔊🤖 HYBRID USERNAME MATCHING TEST TOOL")
+    print("=" * 70)
+    print("This tool tests the hybrid phonetic + AI username matching system.")
+    print("The system uses multiple methods in priority order:")
+    print("1. ✅ Exact match (case-insensitive)")
+    print("2. 🔍 Fuzzy match (pattern-based)")
+    print("3. 🔊 Phonetic match (sound-based, fast)")
+    print("4. 🤖 AI match (context-aware, slower)")
+    print("=" * 70)
 
 def display_usernames(usernames: List[str]):
     """Display the available usernames"""
@@ -88,6 +92,52 @@ def display_usernames(usernames: List[str]):
     for i, username in enumerate(usernames, 1):
         print(f"{i:2d}. {username}")
     print("-" * 40)
+
+def test_detailed_matching(ai_helper: AIModerationHelper, spoken_username: str) -> Optional[str]:
+    """Test each matching method individually and show results"""
+    recent_usernames = ai_helper.username_logger.get_recent_usernames()
+    spoken_lower = spoken_username.lower()
+    
+    # Step 1: Exact match
+    print(f"  1. ✅ Exact match: ", end="")
+    for username in recent_usernames:
+        if username.lower() == spoken_lower:
+            print(f"'{spoken_username}' → '{username}' ✅")
+            return username
+    print("No exact match ❌")
+    
+    # Step 2: Fuzzy match
+    print(f"  2. 🔍 Fuzzy match: ", end="")
+    fuzzy_match = ai_helper._try_fuzzy_match(spoken_lower, recent_usernames)
+    if fuzzy_match:
+        print(f"'{spoken_username}' → '{fuzzy_match}' ✅")
+        return fuzzy_match
+    print("No fuzzy match ❌")
+    
+    # Step 3: Phonetic match
+    print(f"  3. 🔊 Phonetic match: ", end="")
+    try:
+        phonetic_result = ai_helper.username_logger.find_phonetically_similar_username(spoken_username, threshold=0.6)
+        if phonetic_result:
+            matched_username, score = phonetic_result
+            print(f"'{spoken_username}' → '{matched_username}' (score: {score:.3f}) ✅")
+            return matched_username
+        print("No phonetic match ❌")
+    except Exception as e:
+        print(f"Phonetic matching error: {e} ❌")
+    
+    # Step 4: AI match
+    print(f"  4. 🤖 AI match: ", end="")
+    ai_result = ai_helper.username_logger.find_ai_similar_username(spoken_username)
+    if ai_result:
+        matched_username, reasoning = ai_result
+        print(f"'{spoken_username}' → '{matched_username}' ✅")
+        print(f"     Reasoning: {reasoning}")
+        return matched_username
+    print("No AI match ❌")
+    
+    print(f"  ❌ Final result: No match found for '{spoken_username}'")
+    return None
 
 def run_interactive_test():
     """Run the interactive username matching test"""
@@ -130,11 +180,16 @@ def run_interactive_test():
     
     print("\n🎯 Test Instructions:")
     print("- Enter a spoken username (how you would say it)")
-    print("- The AI will try to match it to an actual username")
+    print("- The system will try multiple matching methods automatically")
+    print("- You'll see which method successfully matched the username")
     print("- Type 'quit' or 'exit' to stop")
     print("- Type 'list' to see usernames again")
     print("- Type 'add' to add a custom username to test")
+    print("- Type 'verbose' to toggle detailed matching info")
     print()
+    
+    # Add verbose mode tracking
+    verbose_mode = False
     
     # Interactive testing loop
     while True:
@@ -160,25 +215,33 @@ def run_interactive_test():
                     display_usernames(recent_usernames)
                 continue
             
+            if spoken_input.lower() == 'verbose':
+                verbose_mode = not verbose_mode
+                status = "ON" if verbose_mode else "OFF"
+                print(f"🔧 Verbose mode: {status}")
+                continue
+            
             print(f"\n🔍 Testing: '{spoken_input}'")
-            print("-" * 30)
+            print("-" * 40)
             
-            # Test AI matching
-            result = ai_helper.resolve_username(spoken_input)
-            
-            if result and result != spoken_input:
-                print(f"✅ AI Match Found: '{spoken_input}' → '{result}'")
-                
-                # Show which username from the list it matched
-                recent_usernames = test_logger.get_recent_usernames()
-                if result in recent_usernames:
-                    index = recent_usernames.index(result) + 1
-                    print(f"   Matched username #{index} from the list")
-                
-            elif result == spoken_input:
-                print(f"🔍 Exact match: '{result}'")
+            if verbose_mode:
+                # Show detailed step-by-step matching
+                print("🔍 Step-by-step matching:")
+                result = test_detailed_matching(ai_helper, spoken_input)
             else:
-                print(f"❌ No match found for: '{spoken_input}'")
+                # Regular matching with result indication
+                result = ai_helper.resolve_username(spoken_input)
+                
+                if result and result != spoken_input:
+                    # Show which username from the list it matched
+                    recent_usernames = test_logger.get_recent_usernames()
+                    if result in recent_usernames:
+                        index = recent_usernames.index(result) + 1
+                        print(f"✅ Matched: '{result}' (username #{index} from the list)")
+                elif result == spoken_input:
+                    print(f"✅ Found exact match: '{result}'")
+                else:
+                    print(f"❌ No match found")
             
             print()
             
@@ -196,10 +259,19 @@ def run_batch_test():
     # Initialize test logger
     test_logger = TestUsernameLogger()
     
-    # Add test usernames
+    # Add comprehensive test usernames
     test_usernames = [
-        "V1king_k1ng",
+        # Exact match tests
+        "igor_stn",
         "TestUser123", 
+        
+        # Fuzzy match tests (pattern-based)
+        "bob_test",
+        "alice123",
+        
+        # Phonetic match tests (sound-based)
+        "brian_the_great",
+        "V1king_k1ng",
         "chan_the_magic_man",
         "RoilNavy",
         "john_smith_42",
@@ -211,25 +283,38 @@ def run_batch_test():
     # Initialize AI helper
     ai_helper = AIModerationHelper(test_logger)
     
-    # Test cases
+    # Comprehensive test cases targeting different matching methods
     test_cases = [
-        ("viking king", "V1king_k1ng"),
-        ("test user", "TestUser123"),
-        ("chan the magic man", "chan_the_magic_man"),
-        ("roil navy", "RoilNavy"), 
-        ("john smith", "john_smith_42"),
-        ("gamer dude", "GamerDude2024"),
-        ("dark lord", "XxDarkLordxX"),
-        ("nonexistent user", None)  # Should not match
+        # Exact matches
+        ("igor_stn", "igor_stn", "✅ Exact"),
+        ("testuser123", "TestUser123", "✅ Exact"),
+        
+        # Fuzzy matches (abbreviation patterns)
+        ("igorston", "igor_stn", "🔍 Fuzzy"),
+        ("bobtest", "bob_test", "🔍 Fuzzy"),
+        
+        # Phonetic matches (sound-based)
+        ("brianthegreat", "brian_the_great", "🔊 Phonetic"),
+        ("viking king", "V1king_k1ng", "🔊 Phonetic"),
+        ("chan the magic man", "chan_the_magic_man", "🔊 Phonetic"),
+        ("roil navy", "RoilNavy", "🔊 Phonetic"), 
+        ("john smith", "john_smith_42", "🔊 Phonetic"),
+        ("gamer dude", "GamerDude2024", "🔊 Phonetic"),
+        ("dark lord", "XxDarkLordxX", "🔊 Phonetic"),
+        
+        # AI fallback cases (if phonetic fails)
+        ("very complex pattern", None, "🤖 AI (expected fail)"),
+        ("nonexistent user", None, "❌ No match")
     ]
     
-    print("📋 Test Cases:")
-    print("-" * 50)
+    print("📋 Comprehensive Test Cases:")
+    print("-" * 70)
     
     correct = 0
     total = len(test_cases)
+    method_counts = {"✅ Exact": 0, "🔍 Fuzzy": 0, "🔊 Phonetic": 0, "🤖 AI": 0}
     
-    for spoken, expected in test_cases:
+    for spoken, expected, expected_method in test_cases:
         result = ai_helper.resolve_username(spoken)
         
         if expected is None:
@@ -242,12 +327,37 @@ def run_batch_test():
             success = result == expected
             status = "✅" if success else "❌"
             print(f"{status} '{spoken}' → {result} (expected: {expected})")
+            
+            # Track which method would have been used
+            if success and result:
+                recent_usernames = test_logger.get_recent_usernames()
+                spoken_lower = spoken.lower()
+                
+                # Determine actual method used
+                if any(username.lower() == spoken_lower for username in recent_usernames):
+                    actual_method = "✅ Exact"
+                elif ai_helper._try_fuzzy_match(spoken_lower, recent_usernames):
+                    actual_method = "🔍 Fuzzy"
+                else:
+                    phonetic_result = test_logger.find_phonetically_similar_username(spoken, threshold=0.6)
+                    if phonetic_result:
+                        actual_method = "🔊 Phonetic"
+                    else:
+                        actual_method = "🤖 AI"
+                
+                method_counts[actual_method] = method_counts.get(actual_method, 0) + 1
+                print(f"   Method: {actual_method}")
         
         if success:
             correct += 1
     
-    print("-" * 50)
+    print("-" * 70)
     print(f"📊 Results: {correct}/{total} correct ({correct/total*100:.1f}%)")
+    print(f"📈 Method Distribution:")
+    for method, count in method_counts.items():
+        percentage = (count / sum(method_counts.values()) * 100) if sum(method_counts.values()) > 0 else 0
+        print(f"   {method}: {count} matches ({percentage:.1f}%)")
+    print(f"💰 Cost Efficiency: {(method_counts['✅ Exact'] + method_counts['🔍 Fuzzy'] + method_counts['🔊 Phonetic']) / sum(method_counts.values()) * 100:.1f}% free matches")
 
 def main():
     """Main function"""

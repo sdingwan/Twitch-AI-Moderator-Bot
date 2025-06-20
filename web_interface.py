@@ -8,9 +8,12 @@ import asyncio
 import logging
 import os
 import sys
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Set
 from datetime import datetime
 import json
+import threading
+from threading import Timer
+import time
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
 from fastapi.staticfiles import StaticFiles
@@ -52,19 +55,26 @@ app = FastAPI(title="Twitch AI Moderator Bot", description="Web interface for vo
 class WebAIModeratorBot:
     def __init__(self):
         """Initialize the web-controlled Twitch AI Moderator Bot"""
-        self.voice_recognition = None
-        self.command_processor = None
-        self.twitch_bot = None
-        self.username_logger = None
-        self.ai_helper = None
+        self.current_channel = None
         self.is_running = False
         self.voice_active = False
-        self.current_channel = None
         self.last_command = None
         self.last_command_time = None
-        self.bot_task = None
-        self.username_logger_task = None
-        self.event_loop = None  # Store reference to the main event loop
+        self.websockets = set()
+        self.event_loop = None
+        
+        # Components
+        self.twitch_bot = None
+        self.voice_recognition = None
+        self.command_processor = None
+        self.username_logger = None
+        self.ai_helper = None
+        
+        # Sentence combining for split commands
+        self.pending_command = None
+        self.pending_command_time = None
+        self.command_timeout = 5.0  # 5 seconds to wait for the next sentence
+        self._cleanup_timer = None
         
     async def initialize(self, channel: str):
         """Initialize all components for a specific channel"""
@@ -147,6 +157,9 @@ class WebAIModeratorBot:
         self.is_running = False
         self.voice_active = False
         
+        # Clear any pending commands
+        self._clear_pending_command()
+        
         # Stop voice recognition first
         if self.voice_recognition:
             self.voice_recognition.stop_listening()
@@ -192,6 +205,45 @@ class WebAIModeratorBot:
             except Exception as e:
                 logger.error(f"Failed to schedule coroutine: {e}")
     
+
+    
+    def _clear_pending_command(self):
+        """Clear the pending command and cancel any cleanup timer"""
+        self.pending_command = None
+        self.pending_command_time = None
+        if self._cleanup_timer:
+            self._cleanup_timer.cancel()
+            self._cleanup_timer = None
+    
+    def _start_command_timeout(self):
+        """Start a timer to clean up the pending command after timeout"""
+        if self._cleanup_timer:
+            self._cleanup_timer.cancel()
+        
+        def cleanup():
+            logger.debug("Command timeout reached, clearing pending command")
+            self._clear_pending_command()
+        
+        self._cleanup_timer = Timer(self.command_timeout, cleanup)
+        self._cleanup_timer.start()
+    
+    def _store_pending_command(self, command_text: str):
+        """Store a command that wasn't recognized, waiting for continuation"""
+        self.pending_command = command_text
+        self.pending_command_time = time.time()
+        self._start_command_timeout()
+        logger.info(f"Stored incomplete command, waiting for continuation: {command_text}")
+    
+    def _combine_with_pending(self, new_text: str) -> str:
+        """Combine the pending command with new text"""
+        if not self.pending_command:
+            return new_text
+        
+        # Combine the texts
+        combined = f"{self.pending_command} {new_text}"
+        logger.debug(f"Combined: '{self.pending_command}' + '{new_text}' = '{combined}'")
+        return combined
+    
     async def execute_text_command(self, command_text: str):
         """Execute a text command"""
         try:
@@ -235,19 +287,66 @@ class WebAIModeratorBot:
     def _on_voice_command(self, command_text: str):
         """Handle voice commands - called from voice recognition thread"""
         try:
+            # Only log commands with activation keywords to reduce noise
+            has_activation_keyword, _, _ = Config.find_activation_keyword(command_text)
+            if has_activation_keyword:
+                logger.info(f"🎤 Voice: '{command_text}'")
+            
             self.last_command = command_text
             self.last_command_time = datetime.now().isoformat()
             
+            # Check if we have a pending command to combine with
+            if self.pending_command:
+                if has_activation_keyword:
+                    logger.debug("🔄 Replacing pending command with new one")
+                    self._clear_pending_command()
+                    self._process_single_command(command_text, is_combined=False)
+                else:
+                    # Combine with the pending command
+                    logger.info(f"🔗 Combining commands")
+                    combined_command = self._combine_with_pending(command_text)
+                    self._clear_pending_command()
+                    
+                    # Process the combined command
+                    self._process_single_command(combined_command, is_combined=True)
+                return
+            
+            # Process as a single command
+            self._process_single_command(command_text, is_combined=False)
+            
+        except Exception as e:
+            logger.error(f"Error in voice command handler: {e}")
+            self._schedule_coroutine(self.broadcast_message(f"❌ Error processing voice command: {e}"))
+    
+    def _process_single_command(self, command_text: str, is_combined: bool = False):
+        """Process a single command, with logic for handling incomplete commands"""
+        try:
+            # Only process commands that contain activation keyword OR are combined commands
+            has_activation_keyword, _, _ = Config.find_activation_keyword(command_text)
+            
+            if not has_activation_keyword and not is_combined:
+                # Regular speech without activation keyword and not a combined command - ignore it
+                return
+            
             # Extract the actual command part after the activation keyword
             actual_command = command_text
-            if Config.VOICE_ACTIVATION_KEYWORD in command_text:
-                keyword_index = command_text.find(Config.VOICE_ACTIVATION_KEYWORD)
-                actual_command = command_text[keyword_index + len(Config.VOICE_ACTIVATION_KEYWORD):].strip()
+            if has_activation_keyword:
+                actual_command = Config.extract_command_after_keyword(command_text)
+            else:
+                # This is a combined command, extract command from the combined text
+                actual_command = Config.extract_command_after_keyword(command_text)
+                logger.info(f"🔗 Combined: '{actual_command}'")
             
-            # Process the command
+            # Process the command with AI (only log if we have a command to process)
+            if actual_command.strip():
+                logger.info(f"🤖 Processing: '{actual_command}'")
+            
             moderation_cmd = self.command_processor.process_command(actual_command)
             
             if moderation_cmd:
+                # Clear any pending command since we got a valid result
+                self._clear_pending_command()
+                
                 # Show AI matching result if username was resolved
                 if moderation_cmd.original_username and moderation_cmd.username != moderation_cmd.original_username:
                     self._schedule_coroutine(self.broadcast_message(f"🤖 AI match: '{moderation_cmd.original_username}' → '{moderation_cmd.username}'"))
@@ -269,14 +368,26 @@ class WebAIModeratorBot:
                     
                     self._schedule_coroutine(self.broadcast_message(f"❌ Invalid command: {error_msg}"))
             else:
-                self._schedule_coroutine(self.broadcast_message(f"❓ Could not understand command: {actual_command}"))
+                # Command not recognized
+                if is_combined:
+                    # If this was a combined command and still failed, give up
+                    self._schedule_coroutine(self.broadcast_message(f"❓ Could not understand combined command: {actual_command}"))
+                elif has_activation_keyword:
+                    # Store incomplete commands that contain the activation keyword
+                    # This includes cases where someone just says "hey brian" with no command text
+                    self._store_pending_command(command_text)
+                    if actual_command.strip():
+                        logger.info(f"⏳ Waiting for more: '{actual_command}'")
+                    else:
+                        logger.info(f"⏳ Activation keyword detected, waiting for command")
+                    # Don't broadcast the "could not understand" message yet, wait for the next sentence
             
             # Update status but don't broadcast it to reduce noise
             self._schedule_coroutine(self.broadcast_status())
             
         except Exception as e:
-            logger.error(f"Error in voice command handler: {e}")
-            self._schedule_coroutine(self.broadcast_message(f"❌ Error processing voice command: {e}"))
+            logger.error(f"Error processing command: {e}")
+            self._schedule_coroutine(self.broadcast_message(f"❌ Error processing command: {e}"))
     
     async def _execute_command_async(self, cmd: ModerationCommand, original_command: str):
         """Execute a moderation command asynchronously"""
@@ -284,10 +395,9 @@ class WebAIModeratorBot:
             success = await self.twitch_bot.execute_moderation_command(cmd)
             if success:
                 # Show the actual command that was executed, not the full "Hey Brian" text
-                actual_command = original_command
-                if Config.VOICE_ACTIVATION_KEYWORD in original_command:
-                    keyword_index = original_command.find(Config.VOICE_ACTIVATION_KEYWORD)
-                    actual_command = original_command[keyword_index + len(Config.VOICE_ACTIVATION_KEYWORD):].strip()
+                actual_command = Config.extract_command_after_keyword(original_command)
+                if not actual_command:  # Fallback to original if extraction fails
+                    actual_command = original_command
                 
                 await self.broadcast_message(f"✅ Executed: {actual_command}")
             else:
@@ -383,7 +493,7 @@ async def get_status():
     global bot_instance
     
     if not bot_instance:
-        return BotStatus(is_running=False).dict()
+        return BotStatus(is_running=False, channel=None, voice_active=False, last_command=None, last_command_time=None).dict()
     
     return bot_instance.get_status().dict()
 

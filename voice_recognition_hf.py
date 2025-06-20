@@ -115,6 +115,8 @@ class VoiceRecognitionHF:
         except Exception as e:
             logger.error(f"Failed to setup transcription logging: {e}")
     
+
+    
     def _log_transcription(self, text: str):
         """Log transcribed text to file with timestamp"""
         if not Config.ENABLE_TRANSCRIPTION_LOGGING:
@@ -267,15 +269,11 @@ class VoiceRecognitionHF:
         logger.info("Starting audio processing loop...")
         
         audio_buffer = []
-        silence_threshold = Config.VOICE_SILENCE_THRESHOLD  # Configurable silence threshold
-        min_audio_length = self.sample_rate * 2  # 2 seconds minimum
-        max_audio_length = self.sample_rate * 7  # 7 seconds maximum
+        silence_threshold = 1500
+        min_audio_length = self.sample_rate * 2  # 2 seconds minimum 
+        max_audio_length = self.sample_rate * 8  # 8 seconds maximum 
         silence_duration = 0
-        max_silence = self.sample_rate * 2.5  # 2.5 seconds of silence to trigger processing
-        
-        # Track speech activity to avoid processing pure silence
-        speech_chunks = 0
-        min_speech_chunks = Config.VOICE_MIN_SPEECH_CHUNKS  # Configurable minimum speech chunks
+        max_silence = self.sample_rate * 3  # 3 seconds of silence to trigger processing 
         
         while self.is_listening:
             try:
@@ -291,49 +289,31 @@ class VoiceRecognitionHF:
                 # Convert to numpy for silence detection
                 audio_data = np.frombuffer(audio_chunk, dtype=np.int16)
                 
-                # Enhanced silence detection with RMS energy
-                max_amplitude = np.max(np.abs(audio_data))
-                rms_energy = np.sqrt(np.mean(audio_data.astype(np.float32) ** 2))
-                
-                # Check for silence using both amplitude and energy
-                is_silent = max_amplitude < silence_threshold and rms_energy < (silence_threshold * 0.3)
-                
-                if is_silent:
+                # Simple silence detection like microphone version - just check max amplitude
+                if np.max(np.abs(audio_data)) < silence_threshold:
                     silence_duration += len(audio_data)
                 else:
                     silence_duration = 0
-                    speech_chunks += 1
                 
                 # Calculate total buffer length
                 total_length = sum(len(np.frombuffer(chunk, dtype=np.int16)) for chunk in audio_buffer)
                 
-                # Process audio if we have enough and there's been silence
-                should_process = False
-                if total_length >= max_audio_length:
-                    should_process = True
-                elif (total_length >= min_audio_length and 
-                      silence_duration >= max_silence and 
-                      speech_chunks >= min_speech_chunks):  # Only process if we detected actual speech
-                    should_process = True
-                
-                if should_process:
-                    if speech_chunks >= min_speech_chunks:
-                        # Only process if we detected enough speech activity
-                        logger.debug(f"Processing audio: {total_length/self.sample_rate:.1f}s, "
-                                   f"speech chunks: {speech_chunks}")
+                # Process audio if we have enough and there's been silence (like microphone version)
+                if (total_length >= min_audio_length and 
+                    silence_duration >= max_silence) or total_length >= max_audio_length:
+                    
+                    if total_length >= min_audio_length:
+                        # Process the audio buffer
+                        logger.debug(f"Processing audio: {total_length/self.sample_rate:.1f}s")
                         threading.Thread(
                             target=self._transcribe_audio, 
                             args=(audio_buffer.copy(),), 
                             daemon=True
                         ).start()
-                    else:
-                        logger.debug(f"Skipping audio - insufficient speech activity "
-                                   f"(chunks: {speech_chunks}/{min_speech_chunks})")
                     
                     # Reset buffer
                     audio_buffer = []
                     silence_duration = 0
-                    speech_chunks = 0
                 
             except Exception as e:
                 logger.error(f"Error in audio processing loop: {e}")
@@ -345,17 +325,9 @@ class VoiceRecognitionHF:
             # Combine audio chunks
             audio_data = b''.join(audio_chunks)
             
-            # Check minimum length and audio quality
+            # Check minimum length (like microphone version)
             audio_array = np.frombuffer(audio_data, dtype=np.int16)
             if len(audio_array) < self.sample_rate * 0.5:  # Less than 0.5 seconds
-                return
-            
-            # Final check: Skip if audio is mostly silence
-            max_amplitude = np.max(np.abs(audio_array))
-            rms_energy = np.sqrt(np.mean(audio_array.astype(np.float32) ** 2))
-            
-            if max_amplitude < 800 or rms_energy < 200:
-                logger.debug(f"Skipping silent audio - max: {max_amplitude}, rms: {rms_energy:.1f}")
                 return
             
             # Create WAV file in memory
@@ -380,93 +352,32 @@ class VoiceRecognitionHF:
                 result = response.json()
                 text = result.get('text', '').strip().lower()
                 
-                # Check for no-speech probability if available
-                no_speech_prob = None
-                if 'chunks' in result and result['chunks']:
-                    # Some endpoints return chunks with no_speech_prob
-                    no_speech_prob = result['chunks'][0].get('no_speech_prob', 0.0)
-                elif hasattr(result, 'no_speech_prob'):
-                    no_speech_prob = result.get('no_speech_prob', 0.0)
-                
-                # Skip transcription if high probability of no speech
-                if no_speech_prob and no_speech_prob > Config.VOICE_NO_SPEECH_THRESHOLD:
-                    logger.debug(f"Skipping transcription - no speech detected (prob: {no_speech_prob:.3f})")
-                    return
-                
-                # Additional filtering: Skip very short or repetitive text
-                if text and self._is_valid_speech(text):
+                if text:
                     # Log ALL transcribed text to file (real-time streamer speech)
                     self._log_transcription(text)
                     
-                    # Check if the activation keyword is present for commands
-                    if Config.VOICE_ACTIVATION_KEYWORD in text:
+                    # Check if the activation keyword is present for commands (with flexible matching)
+                    has_activation_keyword, _, _ = Config.find_activation_keyword(text)
+                    if has_activation_keyword:
                         # Extract command after the activation keyword
-                        keyword_index = text.find(Config.VOICE_ACTIVATION_KEYWORD)
-                        command = text[keyword_index + len(Config.VOICE_ACTIVATION_KEYWORD):].strip()
+                        command = Config.extract_command_after_keyword(text)
                         
                         if command:
-                            logger.info(f"🎯 Voice command detected: {command}")
-                            # Pass the full text including "Hey Brian" to the callback
-                            self.command_callback(text)
+                            logger.info(f"🎯 Voice command: {command}")
                         else:
-                            logger.debug("Activation keyword detected but no command found")
+                            logger.debug(f"🎯 Activation keyword detected: {Config.VOICE_ACTIVATION_KEYWORD}")
+                        
+                        # Always pass the full text to the callback when activation keyword is found
+                        self.command_callback(text)
+                    else:
+                        # Also pass text without activation keyword to allow sentence combining
+                        # The web interface will decide if it should be combined with pending commands
+                        self.command_callback(text)
             else:
                 logger.error(f"HF Endpoint error: {response.status_code} - {response.text}")
             
         except Exception as e:
             logger.error(f"Error transcribing audio with HF endpoint: {e}")
-    
-    def _is_valid_speech(self, text: str) -> bool:
-        """Filter out gibberish and non-speech transcriptions"""
-        text = text.strip().lower()
-        
-        # Skip empty or very short text
-        if len(text) < 3:
-            return False
-        
-        # Skip single repeated words
-        words = text.split()
-        if len(words) == 1 and len(words[0]) <= 3:
-            logger.debug(f"Skipping short single word: '{text}'")
-            return False
-        
-        # Skip very repetitive text
-        if len(set(words)) == 1 and len(words) > 1:
-            logger.debug(f"Skipping repetitive text: '{text}'")
-            return False
-        
-        # Common gibberish patterns to filter out
-        gibberish_patterns = [
-            'so',
-            'okay',
-            'the building',
-            'the station',
-            'a small',
-            'very beautiful',
-            'a bit of a mess',
-            'located on the right',
-            'thank you',
-            'thanks for watching',
-            'subscribe',
-            'like and subscribe'
-        ]
-        
-        # Check if text is mostly gibberish patterns
-        for pattern in gibberish_patterns:
-            if pattern in text and len(text.replace(pattern, '').strip()) < 3:
-                logger.debug(f"Skipping gibberish pattern: '{text}'")
-                return False
-        
-        # Skip if text contains mostly common filler words
-        filler_words = {'so', 'the', 'a', 'an', 'is', 'and', 'of', 'in', 'on', 'at', 'to', 'for'}
-        content_words = [word for word in words if word not in filler_words]
-        
-        if len(content_words) == 0:
-            logger.debug(f"Skipping filler-only text: '{text}'")
-            return False
-        
-        # If we get here, it seems like valid speech
-        return True
     
     def __del__(self):
         """Cleanup when object is destroyed"""
