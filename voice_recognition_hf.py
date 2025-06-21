@@ -330,6 +330,32 @@ class VoiceRecognitionHF:
             if len(audio_array) < self.sample_rate * 0.5:  # Less than 0.5 seconds
                 return
             
+            # Check if audio has sufficient volume/energy to be actual speech
+            # Calculate RMS (Root Mean Square) to get average volume level
+            rms = np.sqrt(np.mean(audio_array.astype(float) ** 2))
+            min_speech_volume = Config.VOICE_MIN_SPEECH_VOLUME
+            
+            if rms < min_speech_volume:
+                logger.debug(f"Skipping transcription - audio too quiet (RMS: {rms:.1f})")
+                return
+                
+            # Check for consistent audio energy (not just brief spikes)
+            # Split into segments and check if enough segments have decent volume
+            segment_length = self.sample_rate // 4  # 0.25 second segments
+            segments = [audio_array[i:i+segment_length] for i in range(0, len(audio_array), segment_length)]
+            
+            active_segments = 0
+            for segment in segments:
+                if len(segment) > 0:
+                    segment_rms = np.sqrt(np.mean(segment.astype(float) ** 2))
+                    if segment_rms > min_speech_volume * 0.5:  # Lower threshold for segments
+                        active_segments += 1
+            
+            # Require at least 30% of segments to have decent audio
+            if active_segments / len(segments) < 0.3:
+                logger.debug(f"Skipping transcription - insufficient speech activity ({active_segments}/{len(segments)} segments)")
+                return
+            
             # Create WAV file in memory
             wav_buffer = io.BytesIO()
             with wave.open(wav_buffer, 'wb') as wav_file:
@@ -351,6 +377,24 @@ class VoiceRecognitionHF:
             if response.status_code == 200:
                 result = response.json()
                 text = result.get('text', '').strip().lower()
+                
+                # Filter out common Whisper hallucinations
+                hallucination_phrases = {
+                    'thank you', 'you', 'okay', 'thanks for watching', 'thanks for watching!',
+                    'thank you for watching', 'thank you for watching!', 'thanks', 'obrigado',
+                    'gracias', 'merci', 'danke', '.', '..', '...', 'um', 'uh', 'oh',
+                    'yeah', 'yes', 'no', 'hi', 'hello', 'bye', 'goodbye'
+                }
+                
+                # Check if the entire text is just a hallucination
+                if text in hallucination_phrases:
+                    logger.debug(f"Filtering hallucination: '{text}'")
+                    return
+                
+                # Check if text is too short and likely a hallucination
+                if len(text.strip()) <= 2:
+                    logger.debug(f"Filtering short text: '{text}'")
+                    return
                 
                 if text:
                     # Log ALL transcribed text to file (real-time streamer speech)

@@ -8,6 +8,6 @@ requests>=2.31.0
 irc>=20.0.0
 fastapi>=0.104.0
 uvicorn>=0.24.0 
-streamlink>=6.0.0
+streamlink>=6.0.0 
 jellyfish>=0.11.0
 phonetics>=1.0.5 

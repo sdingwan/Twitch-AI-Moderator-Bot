@@ -24,6 +24,7 @@ class Config:
     VOICE_ACTIVATION_KEYWORD = os.getenv('VOICE_ACTIVATION_KEYWORD', 'hey brian').lower()
     VOICE_TIMEOUT = int(os.getenv('VOICE_TIMEOUT', 5))
     VOICE_PHRASE_TIMEOUT = int(os.getenv('VOICE_PHRASE_TIMEOUT', 2))
+    VOICE_COMMAND_TIMEOUT = float(os.getenv('VOICE_COMMAND_TIMEOUT', 15.0))  # Seconds to wait for sentence continuation
     
     # Transcription Logging
     ENABLE_TRANSCRIPTION_LOGGING = os.getenv('ENABLE_TRANSCRIPTION_LOGGING', 'true').lower() == 'true'
@@ -32,6 +33,7 @@ class Config:
     VOICE_SILENCE_THRESHOLD = int(os.getenv('VOICE_SILENCE_THRESHOLD', 1500))
     VOICE_MIN_SPEECH_CHUNKS = int(os.getenv('VOICE_MIN_SPEECH_CHUNKS', 8))
     VOICE_NO_SPEECH_THRESHOLD = float(os.getenv('VOICE_NO_SPEECH_THRESHOLD', 0.6))
+    VOICE_MIN_SPEECH_VOLUME = int(os.getenv('VOICE_MIN_SPEECH_VOLUME', 100))  # Minimum RMS for speech detection
     
     # Moderation Settings
     DEFAULT_BAN_DURATION = int(os.getenv('DEFAULT_BAN_DURATION', 600))  # 10 minutes
@@ -69,7 +71,7 @@ class Config:
         if not cls.TWITCH_CHANNEL:
             raise ValueError("Twitch channel not set. Please specify a channel.")
         
-        return True
+        return True 
     
     @classmethod
     def find_activation_keyword(cls, text: str) -> tuple[bool, int, int]:

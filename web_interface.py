@@ -73,7 +73,7 @@ class WebAIModeratorBot:
         # Sentence combining for split commands
         self.pending_command = None
         self.pending_command_time = None
-        self.command_timeout = 5.0  # 5 seconds to wait for the next sentence
+        self.command_timeout = 15.0  # 15 seconds to wait for the next sentence
         self._cleanup_timer = None
         
     async def initialize(self, channel: str):
@@ -231,6 +231,11 @@ class WebAIModeratorBot:
         """Store a command that wasn't recognized, waiting for continuation"""
         self.pending_command = command_text
         self.pending_command_time = time.time()
+        
+        # Update last command since this contains the activation keyword
+        self.last_command = command_text
+        self.last_command_time = datetime.now().isoformat()
+        
         self._start_command_timeout()
         logger.info(f"Stored incomplete command, waiting for continuation: {command_text}")
     
@@ -291,9 +296,6 @@ class WebAIModeratorBot:
             has_activation_keyword, _, _ = Config.find_activation_keyword(command_text)
             if has_activation_keyword:
                 logger.info(f"🎤 Voice: '{command_text}'")
-            
-            self.last_command = command_text
-            self.last_command_time = datetime.now().isoformat()
             
             # Check if we have a pending command to combine with
             if self.pending_command:
@@ -392,6 +394,10 @@ class WebAIModeratorBot:
     async def _execute_command_async(self, cmd: ModerationCommand, original_command: str):
         """Execute a moderation command asynchronously"""
         try:
+            # Update last command when we actually execute a valid command
+            self.last_command = original_command
+            self.last_command_time = datetime.now().isoformat()
+            
             success = await self.twitch_bot.execute_moderation_command(cmd)
             if success:
                 # Show the actual command that was executed, not the full "Hey Brian" text
