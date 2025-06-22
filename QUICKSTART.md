@@ -38,7 +38,7 @@ VOICE_ACTIVATION_KEYWORD=hey brian
 
 ## 5. Run
 ```bash
-python web_interface.py     # Start bot with web interface
+cd web && python3 main.py  # Start bot with web interface
 ```
 Then open your browser to: **http://localhost:8000**
 

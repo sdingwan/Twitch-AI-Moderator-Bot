@@ -22,7 +22,7 @@ The bot now includes a beautiful web interface that lets you control everything 
 # Install dependencies (if not already done)
 pip install -r requirements.txt
 
-python web_interface.py
+cd web && python3 main.py
 ```
 
 Then open your browser to: **http://localhost:8000**
@@ -134,7 +134,7 @@ See [DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md) for RunPod, Google Colab, and oth
 
 ### 5. Run
 ```bash
-python web_interface.py
+cd web && python3 main.py
 ```
 
 Then open your browser to: **http://localhost:8000**
@@ -143,7 +143,9 @@ Then open your browser to: **http://localhost:8000**
 
 ```
 Twitch-AI-Moderator-Bot/
-├── web_interface.py        # Main bot application with web interface
+├── web/                    # Web interface directory
+│   ├── main.py            # Main web application entry point
+│   └── frontend.html      # Static HTML frontend
 ├── voice_recognition_hf.py # Voice processing with cloud-hosted Whisper Large V3
 ├── command_processor.py    # Command parsing and validation
 ├── username_logger.py      # Chat monitoring and phonetic username matching
