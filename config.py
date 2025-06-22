@@ -36,8 +36,9 @@ class Config:
     VOICE_MIN_SPEECH_VOLUME = int(os.getenv('VOICE_MIN_SPEECH_VOLUME', 100))  # Minimum RMS for speech detection
     
     # Moderation Settings
-    DEFAULT_BAN_DURATION = int(os.getenv('DEFAULT_BAN_DURATION', 600))  # 10 minutes
-    MAX_BAN_DURATION = int(os.getenv('MAX_BAN_DURATION', 86400))  # 24 hours
+    DEFAULT_TIMEOUT_DURATION = int(os.getenv('DEFAULT_TIMEOUT_DURATION', 600))  # 10 minutes default for timeouts
+    MAX_TIMEOUT_DURATION = int(os.getenv('MAX_TIMEOUT_DURATION', 1209600))  # 14 days max for timeouts (Twitch limit)
+    MAX_FOLLOWERS_ONLY_DURATION = int(os.getenv('MAX_FOLLOWERS_ONLY_DURATION', 7776000))  # 3 months max for followers-only mode
     ENABLE_AUTO_MODERATION = os.getenv('ENABLE_AUTO_MODERATION', 'true').lower() == 'true'
     
     # Rate Limiting (per Twitch guidelines)

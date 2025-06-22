@@ -111,10 +111,10 @@ class CommandProcessor:
             
             Rules for parsing:
             1. BANS are PERMANENT - never set duration for "ban" action, always null
-            2. For "timeout" without duration: use {Config.DEFAULT_BAN_DURATION} seconds
+            2. For "timeout" without duration: use {Config.DEFAULT_TIMEOUT_DURATION} seconds
             3. For "slow mode" without duration: use 10 seconds as default
             4. For "followers_only" default duration is 1 second. Otherwise, use the duration provided.
-            5. Convert time units: minutes->seconds (*60), hours->seconds (*3600), days->seconds (*86400)
+            5. Convert time units: minutes->seconds (*60), hours->seconds (*3600), days->seconds (*86400), weeks->seconds (*604800)
             6. Clean usernames: lowercase, no spaces, alphanumeric + underscore only
             7. Pay attention to opposite actions: "unban" vs "ban", "untimeout" vs "timeout", etc.
             8. For unclear commands, use "unknown" action
@@ -138,6 +138,7 @@ class CommandProcessor:
             - "restrict user", "put user in restricted mode" -> restrict
             - "unrestrict user", "remove restrictions" -> unrestrict
             - "change weather to [location]", "set weather to [location]", "weather location [location]" -> weather
+            - "set the weather", "change the weather" (without location) -> unknown (incomplete command)
             
             Examples:
             "ban johndoe" -> {{"action": "ban", "username": "johndoe", "duration": null, "reason": null}}
@@ -165,6 +166,8 @@ class CommandProcessor:
             "unrestrict gooduser" -> {{"action": "unrestrict", "username": "gooduser", "duration": null, "reason": null, "weather_location": null}}
             "change weather to Naples, Italy" -> {{"action": "weather", "username": null, "duration": null, "reason": null, "weather_location": "Naples, IT"}}
             "set weather to Tokyo, Japan" -> {{"action": "weather", "username": null, "duration": null, "reason": null, "weather_location": "Tokyo, JP"}}
+            "set the weather" -> {{"action": "unknown", "username": null, "duration": null, "reason": null, "weather_location": null}}
+            "change the weather" -> {{"action": "unknown", "username": null, "duration": null, "reason": null, "weather_location": null}}
             
             Respond with ONLY the JSON object, no other text.
             """
@@ -271,9 +274,11 @@ class CommandProcessor:
                 if cmd.duration < 1:
                     return False, "Duration must be at least 1 second"
             
-            # Check maximum duration for all actions
-            if cmd.duration > Config.MAX_BAN_DURATION:
-                return False, f"Duration cannot exceed {Config.MAX_BAN_DURATION} seconds"
+            # Check maximum duration limits based on Twitch's official limits
+            if cmd.action == 'timeout' and cmd.duration > Config.MAX_TIMEOUT_DURATION:
+                return False, f"Timeout duration cannot exceed {Config.MAX_TIMEOUT_DURATION} seconds (14 days)"
+            elif cmd.action == 'followers_only' and cmd.duration > Config.MAX_FOLLOWERS_ONLY_DURATION:
+                return False, f"Followers-only duration cannot exceed {Config.MAX_FOLLOWERS_ONLY_DURATION} seconds (3 months)"
         
         return True, ""
     
