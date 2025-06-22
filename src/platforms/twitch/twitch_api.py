@@ -5,7 +5,7 @@ import time
 import json
 from typing import Optional, Dict, List, Any
 from datetime import datetime, timedelta
-from config import Config
+from ...core.config import Config
 
 logger = logging.getLogger(__name__)
 

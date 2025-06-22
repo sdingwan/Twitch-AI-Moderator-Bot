@@ -3,7 +3,7 @@ import logging
 from typing import Dict, Optional, Tuple, List
 from dataclasses import dataclass
 from openai import OpenAI
-from config import Config
+from .config import Config
 import json
 
 logger = logging.getLogger(__name__)

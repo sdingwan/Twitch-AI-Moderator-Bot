@@ -11,7 +11,7 @@ import requests
 import subprocess
 import asyncio
 from typing import Optional, Callable
-from config import Config
+from ..core.config import Config
 from datetime import datetime
 
 logger = logging.getLogger(__name__)

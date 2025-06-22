@@ -143,15 +143,24 @@ Then open your browser to: **http://localhost:8000**
 
 ```
 Twitch-AI-Moderator-Bot/
+├── src/                    # Source code directory
+│   ├── core/               # Core bot functionality
+│   │   ├── config.py       # Configuration management
+│   │   └── command_processor.py # Command parsing and validation
+│   ├── platforms/          # Platform-specific integrations
+│   │   └── twitch/         # Twitch-specific code
+│   │       ├── twitch_api.py   # Twitch Helix API client
+│   │       └── twitch_bot.py   # Twitch moderation logic
+│   ├── voice/              # Voice recognition components
+│   │   └── voice_recognition_hf.py # Voice processing with cloud-hosted Whisper Large V3
+│   └── utils/              # Utility modules
+│       └── username_logger.py # Chat monitoring and phonetic username matching
 ├── web/                    # Web interface directory
-│   ├── main.py            # Main web application entry point
+│   ├── main.py            # Web application backend
 │   └── frontend.html      # Static HTML frontend
-├── voice_recognition_hf.py # Voice processing with cloud-hosted Whisper Large V3
-├── command_processor.py    # Command parsing and validation
-├── username_logger.py      # Chat monitoring and phonetic username matching
-├── twitch_api.py           # Twitch Helix API client
-├── twitch_bot.py           # Twitch moderation logic
-├── config.py               # Configuration management
+├── docs/                   # Documentation
+│   ├── README.md          # This file
+│   └── QUICKSTART.md      # Quick start guide
 ├── chat_usernames.log      # Recent chat usernames (auto-generated)
 └── requirements.txt        # Dependencies
 ```

@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+ #!/usr/bin/env python3
 """
 Backend API for Twitch AI Moderator Bot
 A FastAPI-based backend to control the bot
@@ -23,11 +23,11 @@ import uvicorn
 
 # Import bot components
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from config import Config
-from voice_recognition_hf import VoiceRecognitionHF
-from command_processor import CommandProcessor, ModerationCommand
-from twitch_bot import TwitchModeratorBot
-from username_logger import UsernameLogger, AIModerationHelper
+from src.core.config import Config
+from src.voice.voice_recognition_hf import VoiceRecognitionHF
+from src.core.command_processor import CommandProcessor, ModerationCommand
+from src.platforms.twitch.twitch_bot import TwitchModeratorBot
+from src.utils.username_logger import UsernameLogger, AIModerationHelper
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)

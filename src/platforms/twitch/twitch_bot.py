@@ -3,9 +3,9 @@ import logging
 import time
 from typing import Optional, Dict, List
 from datetime import datetime, timedelta
-from config import Config
-from command_processor import ModerationCommand
-from twitch_api import TwitchHelixAPI
+from ...core.config import Config
+from ...core.command_processor import ModerationCommand
+from .twitch_api import TwitchHelixAPI
 
 logger = logging.getLogger(__name__)
 

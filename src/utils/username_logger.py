@@ -15,7 +15,7 @@ from datetime import datetime, timedelta
 from typing import List, Dict, Optional, Tuple
 from collections import deque
 from openai import OpenAI
-from config import Config
+from ..core.config import Config
 
 # Import phonetic libraries with fallback
 try:
