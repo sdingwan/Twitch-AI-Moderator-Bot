@@ -19,6 +19,7 @@ __pycache__/
 # Logs (contain private information)
 *.log
 moderator_bot.log
+stream_transcription.log
 
 # IDE files
 .vscode/

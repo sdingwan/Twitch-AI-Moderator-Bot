@@ -112,7 +112,6 @@ HF_ENDPOINT_URL=https://your-endpoint.endpoints.huggingface.cloud
 
 # Voice Settings
 VOICE_ACTIVATION_KEYWORD=hey brian
-MICROPHONE_INDEX=-1
 ```
 
 ### 3. Deploy Whisper to the Cloud
@@ -135,25 +134,16 @@ See [DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md) for RunPod, Google Colab, and oth
 
 ### 5. Run
 ```bash
-python main.py
+python web_interface.py
 ```
 
-## 🛠️ Commands
-
-```bash
-python main.py              # Start the bot
-python main.py --test-mic   # Test your microphone
-python main.py --list-mics  # List available microphones
-python main.py --help       # Show help
-```
+Then open your browser to: **http://localhost:8000**
 
 ## 📁 Project Structure
 
 ```
 Twitch-AI-Moderator-Bot/
-├── main.py                 # Main bot application (terminal)
-├── web_interface.py        # Web interface application
-├── start_web.py            # Simple web interface launcher
+├── web_interface.py        # Main bot application with web interface
 ├── voice_recognition_hf.py # Voice processing with cloud-hosted Whisper Large V3
 ├── command_processor.py    # Command parsing and validation
 ├── username_logger.py      # Chat monitoring and phonetic username matching
@@ -183,15 +173,9 @@ Twitch-AI-Moderator-Bot/
 
 ## 🆘 Troubleshooting
 
-**Microphone not working?**
-```bash
-python main.py --list-mics  # Find your microphone index
-# Update MICROPHONE_INDEX in .env file
-```
-
 **Bot not responding to voice?**
 - Check your Hugging Face API token and endpoint URL
-- Test with: `python main.py --test-mic`
+- Make sure your Twitch channel is live (the bot captures stream audio)
 - Speak clearly and include "Hey Brian" before commands
 
 **Username not being matched?**
