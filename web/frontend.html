@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Twitch AI Moderator Bot</title>
+    <title>Multi-Platform AI Moderator Bot</title>
     <style>
         * {
             margin: 0;
@@ -52,6 +52,36 @@
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
             gap: 20px;
+        }
+        
+        .platform-status {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 15px;
+            margin-top: 20px;
+        }
+        
+        .platform-card {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 15px;
+            border-left: 4px solid #6c757d;
+        }
+        
+        .platform-card.twitch {
+            border-left-color: #9146ff;
+        }
+        
+        .platform-card.kick {
+            border-left-color: #53fc18;
+        }
+        
+        .platform-card.active {
+            background: #d4edda;
+        }
+        
+        .platform-card.inactive {
+            background: #f8d7da;
         }
         
         .status-item {
@@ -109,6 +139,66 @@
         .activity-section h3 {
             margin-bottom: 15px;
             color: #495057;
+        }
+        
+        .platform-selector {
+            margin-bottom: 20px;
+            padding: 15px;
+            background: #e9ecef;
+            border-radius: 8px;
+        }
+        
+        .platform-selector h4 {
+            margin-bottom: 10px;
+            color: #495057;
+        }
+        
+        .platform-options {
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+        
+        .platform-option {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        
+        .platform-option input[type="checkbox"] {
+            width: auto;
+            margin: 0;
+        }
+        
+        .channel-inputs {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+        
+        .channel-input-group {
+            display: none;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .channel-input-group.active {
+            display: flex;
+        }
+        
+        .channel-input-group label {
+            min-width: 60px;
+            font-weight: bold;
+            color: #495057;
+        }
+        
+        .channel-input-group.twitch label {
+            color: #9146ff;
+        }
+        
+        .channel-input-group.kick label {
+            color: #53fc18;
         }
         
         input, button, textarea {
@@ -229,8 +319,8 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>Twitch AI Moderator Bot</h1>
-            <p>Voice-controlled Twitch Moderation</p>
+            <h1>Multi-Platform AI Moderator Bot</h1>
+            <p>Voice-controlled Twitch & Kick Moderation</p>
         </div>
         
         <div class="card">
@@ -244,14 +334,18 @@
                     <h3>Voice Recognition</h3>
                     <div id="voice-active">Inactive</div>
                 </div>
-                <div class="status-item" id="channel-status">
-                    <h3>Channel</h3>
-                    <div id="current-channel">Not configured</div>
+                <div class="status-item" id="platforms-status">
+                    <h3>Enabled Platforms</h3>
+                    <div id="enabled-platforms">None</div>
                 </div>
                 <div class="status-item" id="last-command-status">
                     <h3>Last Command</h3>
                     <div id="last-command">None</div>
                 </div>
+            </div>
+            
+            <div class="platform-status" id="platform-status-cards">
+                <!-- Platform-specific status cards will be populated by JavaScript -->
             </div>
         </div>
         
@@ -259,20 +353,48 @@
             <h2>Controls</h2>
             <div class="controls">
                 <div class="control-group">
-                    <h3>Bot Control</h3>
-                    <input type="text" id="channel-input" placeholder="Enter Twitch channel">
+                    <h3>Bot Configuration</h3>
+                    
+                    <div class="platform-selector">
+                        <h4>Select Platforms:</h4>
+                        <div class="platform-options">
+                            <div class="platform-option">
+                                <input type="checkbox" id="platform-twitch" value="twitch" onchange="updateChannelInputs()">
+                                <label for="platform-twitch">Twitch</label>
+                            </div>
+                            <div class="platform-option">
+                                <input type="checkbox" id="platform-kick" value="kick" onchange="updateChannelInputs()">
+                                <label for="platform-kick">Kick</label>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="channel-inputs">
+                        <div class="channel-input-group twitch" id="twitch-input-group">
+                            <label>Twitch:</label>
+                            <input type="text" id="twitch-channel-input" placeholder="Enter Twitch channel">
+                        </div>
+                        <div class="channel-input-group kick" id="kick-input-group">
+                            <label>Kick:</label>
+                            <input type="text" id="kick-channel-input" placeholder="Enter Kick channel">
+                        </div>
+                    </div>
+                    
                     <button onclick="startBot()" class="btn-success">Start Bot</button>
-                    <button onclick="stopBot()" class="btn-danger">Stop Bot</button>
+                    <button onclick="stopBot()" class="btn-danger">Stop Bot (All)</button>
+                    <button onclick="stopPlatform('twitch')" class="btn-warning">Stop Twitch</button>
+                    <button onclick="stopPlatform('kick')" class="btn-warning">Stop Kick</button>
+                    
                     <div class="examples">
-                        <h4>Voice Commands:</h4>
+                        <h4>Voice Commands (work on all platforms):</h4>
                         <ul>
                             <li>"Hey Brian, ban username123"</li>
                             <li>"Hey Brian, timeout spammer for 10 minutes"</li>
+                            <li>"Hey Brian, unban gooduser"</li>
                             <li>"Hey Brian, clear chat"</li>
                             <li>"Hey Brian, slow mode 30 seconds"</li>
                             <li>"Hey Brian, followers only mode"</li>
                             <li>"Hey Brian, subscribers only mode"</li>
-                            <li>"Hey Brian, change weather to Naples, Italy"</li>
                             <li>"Hey Brian, set weather to Tokyo, Japan"</li>
                         </ul>
                     </div>
@@ -282,7 +404,7 @@
                     <h3>Activity Log</h3>
                     <div class="log" id="activity-log">
                         <div class="log-entry info">
-                            <span class="timestamp">[System]</span> Web interface loaded. Configure a channel to get started.
+                            <span class="timestamp">[System]</span> Multi-platform web interface loaded. Select platforms and configure channels to get started.
                         </div>
                     </div>
                 </div>
@@ -317,6 +439,17 @@
             };
         }
         
+        function updateChannelInputs() {
+            const twitchChecked = document.getElementById('platform-twitch').checked;
+            const kickChecked = document.getElementById('platform-kick').checked;
+            
+            const twitchGroup = document.getElementById('twitch-input-group');
+            const kickGroup = document.getElementById('kick-input-group');
+            
+            twitchGroup.classList.toggle('active', twitchChecked);
+            kickGroup.classList.toggle('active', kickChecked);
+        }
+        
         function updateStatus(status) {
             // Bot status
             const botStatus = document.getElementById('bot-status');
@@ -330,11 +463,15 @@
             voiceActive.textContent = status.voice_active ? 'Active' : 'Inactive';
             voiceStatus.className = 'status-item ' + (status.voice_active ? 'active' : 'inactive');
             
-            // Channel status
-            const channelStatus = document.getElementById('channel-status');
-            const currentChannel = document.getElementById('current-channel');
-            currentChannel.textContent = status.channel || 'Not configured';
-            channelStatus.className = 'status-item ' + (status.channel ? 'active' : 'inactive');
+            // Enabled platforms
+            const platformsStatus = document.getElementById('platforms-status');
+            const enabledPlatforms = document.getElementById('enabled-platforms');
+            const platforms = status.enabled_platforms || [];
+            enabledPlatforms.textContent = platforms.length > 0 ? platforms.join(', ') : 'None';
+            platformsStatus.className = 'status-item ' + (platforms.length > 0 ? 'active' : 'inactive');
+            
+            // Platform-specific status cards
+            updatePlatformStatusCards(status);
             
             // Last command
             const lastCommand = document.getElementById('last-command');
@@ -344,6 +481,34 @@
             } else {
                 lastCommand.textContent = 'None';
             }
+        }
+        
+        function updatePlatformStatusCards(status) {
+            const container = document.getElementById('platform-status-cards');
+            container.innerHTML = '';
+            
+            const platforms = status.enabled_platforms || [];
+            const currentChannels = status.current_channels || {};
+            const platformStatus = status.platform_status || {};
+            
+            platforms.forEach(platform => {
+                const card = document.createElement('div');
+                card.className = `platform-card ${platform}`;
+                
+                const isConnected = platformStatus[platform]?.connected || false;
+                card.classList.add(isConnected ? 'active' : 'inactive');
+                
+                const channel = currentChannels[platform] || 'Not configured';
+                const statusText = isConnected ? 'Connected' : 'Disconnected';
+                
+                card.innerHTML = `
+                    <h4>${platform.charAt(0).toUpperCase() + platform.slice(1)}</h4>
+                    <div><strong>Channel:</strong> ${channel}</div>
+                    <div><strong>Status:</strong> ${statusText}</div>
+                `;
+                
+                container.appendChild(card);
+            });
         }
         
         function getLogType(message) {
@@ -392,14 +557,41 @@
         }
         
         async function startBot() {
-            const channel = document.getElementById('channel-input').value.trim();
-            if (!channel) {
-                addLogEntry('❌ Please enter a channel name', 'error');
+            const twitchChecked = document.getElementById('platform-twitch').checked;
+            const kickChecked = document.getElementById('platform-kick').checked;
+            
+            if (!twitchChecked && !kickChecked) {
+                addLogEntry('❌ Please select at least one platform', 'error');
                 return;
             }
             
+            const platforms = [];
+            const config = { platforms: [] };
+            
+            if (twitchChecked) {
+                const twitchChannel = document.getElementById('twitch-channel-input').value.trim();
+                if (!twitchChannel) {
+                    addLogEntry('❌ Please enter a Twitch channel name', 'error');
+                    return;
+                }
+                platforms.push('twitch');
+                config.twitch_channel = twitchChannel;
+            }
+            
+            if (kickChecked) {
+                const kickChannel = document.getElementById('kick-channel-input').value.trim();
+                if (!kickChannel) {
+                    addLogEntry('❌ Please enter a Kick channel name', 'error');
+                    return;
+                }
+                platforms.push('kick');
+                config.kick_channel = kickChannel;
+            }
+            
+            config.platforms = platforms;
+            
             try {
-                const result = await apiCall('/api/start', 'POST', { channel });
+                const result = await apiCall('/api/start', 'POST', config);
                 // Only show message if it's not empty
                 if (result.message) {
                     addLogEntry(result.message, 'success');
@@ -421,6 +613,17 @@
             }
         }
         
+        async function stopPlatform(platform) {
+            try {
+                const result = await apiCall('/api/stop_platform', 'POST', { platform });
+                if (result.message) {
+                    addLogEntry(result.message, 'success');
+                }
+            } catch (error) {
+                // Error already logged in apiCall
+            }
+        }
+        
         // Initialize
         connectWebSocket();
         
@@ -430,8 +633,19 @@
             .then(status => updateStatus(status))
             .catch(error => addLogEntry('❌ Failed to load initial status', 'error'));
         
+        // Default to Twitch checked for backward compatibility
+        document.getElementById('platform-twitch').checked = true;
+        updateChannelInputs();
+        
         // Allow Enter key to start bot
-        document.getElementById('channel-input').addEventListener('keypress', function(e) {
+        document.getElementById('twitch-channel-input').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                startBot();
+            }
+        });
+        
+        document.getElementById('kick-channel-input').addEventListener('keypress', function(e) {
             if (e.key === 'Enter') {
                 e.preventDefault();
                 startBot();

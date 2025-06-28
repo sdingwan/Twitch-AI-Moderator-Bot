@@ -45,7 +45,12 @@ class VoiceRecognitionHF:
         
         # Initialize Hugging Face Inference Endpoint
         self._setup_hf_endpoint()
-        self._setup_twitch_stream()
+        
+        # Only setup Twitch stream if Twitch channel is configured
+        if Config.TWITCH_CHANNEL:
+            self._setup_twitch_stream()
+        else:
+            logger.info("Skipping Twitch stream setup - no Twitch channel configured")
     
     def _setup_hf_endpoint(self):
         """Setup Hugging Face Inference Endpoint for Whisper"""
@@ -94,7 +99,8 @@ class VoiceRecognitionHF:
             
         except Exception as e:
             logger.error(f"Failed to setup Twitch stream: {e}")
-            raise
+            # Don't raise the exception - let it continue without Twitch
+            logger.warning("Continuing without Twitch stream audio capture")
     
     def _setup_transcription_logging(self):
         """Setup transcription logging to file"""
@@ -105,8 +111,11 @@ class VoiceRecognitionHF:
         try:
             # Initialize the transcription log file
             with open(self.transcription_log_file, 'w', encoding='utf-8') as f:
-                f.write(f"# Twitch Stream Transcription Log - Started at {datetime.now()}\n")
-                f.write(f"# Channel: {Config.TWITCH_CHANNEL}\n")
+                f.write(f"# Stream Transcription Log - Started at {datetime.now()}\n")
+                if Config.TWITCH_CHANNEL:
+                    f.write(f"# Twitch Channel: {Config.TWITCH_CHANNEL}\n")
+                if hasattr(Config, 'KICK_CHANNEL') and Config.KICK_CHANNEL:
+                    f.write(f"# Kick Channel: {Config.KICK_CHANNEL}\n")
                 f.write("# Format: [timestamp] transcribed_text\n")
                 f.write("-" * 80 + "\n\n")
             

@@ -13,6 +13,17 @@ class Config:
     TWITCH_CHANNEL = None  # Will be set dynamically
     TWITCH_BOT_USERNAME = os.getenv('TWITCH_BOT_USERNAME')
     
+    # Kick Configuration
+    KICK_CLIENT_ID = os.getenv('KICK_CLIENT_ID')
+    KICK_CLIENT_SECRET = os.getenv('KICK_CLIENT_SECRET')
+    KICK_ACCESS_TOKEN = os.getenv('KICK_ACCESS_TOKEN')
+    KICK_REFRESH_TOKEN = os.getenv('KICK_REFRESH_TOKEN')
+    KICK_CHANNEL = None  # Will be set dynamically
+    KICK_REDIRECT_URI = os.getenv('KICK_REDIRECT_URI', 'http://localhost:8000/auth/kick/callback')
+    
+    # Multi-Platform Configuration
+    ENABLED_PLATFORMS = os.getenv('ENABLED_PLATFORMS', 'twitch,kick')  # 'twitch', 'kick', or 'twitch,kick'
+    
     # OpenAI Configuration
     OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
     
@@ -51,6 +62,25 @@ class Config:
         cls.TWITCH_CHANNEL = channel.lower().strip()
         if cls.TWITCH_CHANNEL.startswith('#'):
             cls.TWITCH_CHANNEL = cls.TWITCH_CHANNEL[1:]  # Remove # if present
+    
+    @classmethod
+    def set_kick_channel(cls, channel: str):
+        """Set the Kick channel dynamically"""
+        cls.KICK_CHANNEL = channel.lower().strip()
+    
+    @classmethod
+    def set_platform_channels(cls, twitch_channel: str = None, kick_channel: str = None):
+        """Set channels for multiple platforms"""
+        if twitch_channel:
+            cls.set_twitch_channel(twitch_channel)
+        if kick_channel:
+            cls.set_kick_channel(kick_channel)
+    
+    @classmethod 
+    def update_kick_tokens(cls, access_token: str, refresh_token: str):
+        """Update Kick OAuth tokens dynamically"""
+        cls.KICK_ACCESS_TOKEN = access_token
+        cls.KICK_REFRESH_TOKEN = refresh_token
     
     @classmethod
     def validate(cls):
