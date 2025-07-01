@@ -299,6 +299,17 @@ class WebAIModeratorBot:
                     else:
                         await self.broadcast_message(f"❌ Multi-platform manager not initialized")
                 else:
+                    # If this is a username resolution failure for dangerous actions, notify chat on all relevant platforms
+                    if ("username not found in recent chat" in error_msg and 
+                        moderation_cmd.action in ['ban', 'timeout', 'restrict']):
+                        original_username = moderation_cmd.original_username or moderation_cmd.username
+                        # Notify all enabled platforms
+                        if self.multi_platform_manager:
+                            for platform, bot in self.multi_platform_manager.bots.items():
+                                # Only notify platforms where the command would apply
+                                if hasattr(bot, 'send_username_not_found_message'):
+                                    # Schedule the coroutine for async method
+                                    self._schedule_coroutine(bot.send_username_not_found_message(original_username, moderation_cmd.action))
                     await self.broadcast_message(f"❌ Invalid command: {error_msg}")
             else:
                 await self.broadcast_message(f"❓ Could not understand command: {command_text}")
@@ -378,13 +389,17 @@ class WebAIModeratorBot:
                 if is_valid:
                     self._schedule_coroutine(self._execute_command_async(moderation_cmd, command_text))
                 else:
-                    # Check if this is a username resolution failure for dangerous actions
+                    # If this is a username resolution failure for dangerous actions, notify chat on all relevant platforms
                     if ("username not found in recent chat" in error_msg and 
                         moderation_cmd.action in ['ban', 'timeout', 'restrict']):
-                        # Send message to chat about the failed resolution
                         original_username = moderation_cmd.original_username or moderation_cmd.username
-                        # Note: Username not found messages are handled by the platform bots automatically
-                    
+                        # Notify all enabled platforms
+                        if self.multi_platform_manager:
+                            for platform, bot in self.multi_platform_manager.bots.items():
+                                # Only notify platforms where the command would apply
+                                if hasattr(bot, 'send_username_not_found_message'):
+                                    # Schedule the coroutine for async method
+                                    self._schedule_coroutine(bot.send_username_not_found_message(original_username, moderation_cmd.action))
                     self._schedule_coroutine(self.broadcast_message(f"❌ Invalid command: {error_msg}"))
             else:
                 # Command not recognized

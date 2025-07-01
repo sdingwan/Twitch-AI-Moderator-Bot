@@ -140,4 +140,13 @@ class KickModeratorBot:
         try:
             await self.api.send_chat_message("🤖 AI Moderator is online on Kick!")
         except Exception as e:
-            logger.error(f"Failed to send status message to Kick: {e}") 
+            logger.error(f"Failed to send status message to Kick: {e}")
+    
+    async def send_username_not_found_message(self, spoken_username: str, action: str):
+        """Send message to Kick chat when username cannot be found for moderation"""
+        try:
+            message = f"⚠️ Cannot {action} '{spoken_username}' - user not found in recent chat."
+            await self.api.send_chat_message(message)
+            logger.info(f"Sent username not found message to Kick chat: {message}")
+        except Exception as e:
+            logger.error(f"Failed to send username not found message to Kick: {e}") 
