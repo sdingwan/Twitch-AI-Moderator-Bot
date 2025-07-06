@@ -28,16 +28,10 @@ class KickAPI:
         try:
             self.session = aiohttp.ClientSession()
             
-            # Debug: Log tokens at startup
-            logger.debug(f"[DEBUG] Startup: access_token={Config.KICK_ACCESS_TOKEN[:10]}... refresh_token={Config.KICK_REFRESH_TOKEN[:10]}...")
-            
             # If we have stored tokens, try to use them
             if Config.KICK_ACCESS_TOKEN:
                 self.access_token = Config.KICK_ACCESS_TOKEN
                 self.refresh_token = Config.KICK_REFRESH_TOKEN
-                
-                # Debug: Log before validation
-                logger.debug(f"[DEBUG] Before validation: access_token={self.access_token[:10]}... refresh_token={self.refresh_token[:10]}...")
                 
                 # Validate current token
                 if await self._validate_token():
@@ -45,8 +39,6 @@ class KickAPI:
                     logger.info("✅ Kick API initialized with existing token")
                     return True
                 else:
-                    # Debug: Log before refresh
-                    logger.debug(f"[DEBUG] Token invalid, attempting refresh with refresh_token={self.refresh_token[:10]}...")
                     # Token invalid, try to refresh
                     if await self._refresh_access_token():
                         await self._get_broadcaster_id()
@@ -106,15 +98,12 @@ class KickAPI:
             
             headers = {'Content-Type': 'application/x-www-form-urlencoded'}
             
-            logger.debug(f"[DEBUG] Attempting token refresh with refresh_token={self.refresh_token[:10]}...")
-            
             async with self.session.post(
                 f"{self.oauth_url}/oauth/token",
                 headers=headers,
                 data=data
             ) as response:
                 resp_text = await response.text()
-                logger.debug(f"[DEBUG] Refresh response status: {response.status}, body: {resp_text}")
                 if response.status == 200:
                     token_data = await response.json()
                     self.access_token = token_data['access_token']
@@ -127,7 +116,6 @@ class KickAPI:
                     Config.update_kick_tokens(self.access_token, self.refresh_token)
                     
                     logger.info("✅ Access token refreshed and saved")
-                    logger.debug(f"[DEBUG] New access_token={self.access_token[:10]}... refresh_token={self.refresh_token[:10]}...")
                     return True
                 else:
                     logger.error(f"Token refresh failed: {response.status}")
@@ -241,8 +229,6 @@ class KickAPI:
             if duration:
                 ban_data['duration'] = max(1, min(10080, duration // 60))  # Convert seconds to minutes, clamp to 1-10080
             
-            logger.debug(f"Ban request data: {ban_data}")
-            
             async with self.session.post(
                 f"{self.base_url}/moderation/bans",
                 headers=headers,
@@ -283,8 +269,6 @@ class KickAPI:
                 'broadcaster_user_id': int(self.broadcaster_user_id),  # Ensure integer
                 'user_id': int(user_id)  # Convert string to integer as required by API
             }
-            
-            logger.debug(f"Unban request data: {unban_data}")
             
             async with self.session.delete(
                 f"{self.base_url}/moderation/bans",

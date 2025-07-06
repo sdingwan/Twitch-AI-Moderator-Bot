@@ -22,8 +22,6 @@ try:
     PHONETIC_AVAILABLE = True
 except ImportError:
     PHONETIC_AVAILABLE = False
-    logger = logging.getLogger(__name__)
-    logger.warning("Phonetic libraries not available. Install with: pip install jellyfish phonetics")
 
 logger = logging.getLogger(__name__)
 

@@ -154,7 +154,7 @@ Twitch-AI-Moderator-Bot/
 │   ├── voice/              # Voice recognition components
 │   │   └── voice_recognition_hf.py # Voice processing with cloud-hosted Whisper Large V3
 │   └── utils/              # Utility modules
-│       └── username_logger.py # Chat monitoring and phonetic username matching
+│       └── twitch_username_logger.py # Twitch chat monitoring and phonetic username matching
 ├── web/                    # Web interface directory
 │   ├── main.py            # Web application backend
 │   └── frontend.html      # Static HTML frontend

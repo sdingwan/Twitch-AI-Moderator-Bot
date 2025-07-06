@@ -360,7 +360,6 @@ class VoiceRecognitionHF:
                     
                     if total_length >= min_audio_length:
                         # Process the audio buffer
-                        logger.debug(f"Processing audio: {total_length/self.sample_rate:.1f}s")
                         threading.Thread(
                             target=self._transcribe_audio, 
                             args=(audio_buffer.copy(),), 
@@ -392,7 +391,6 @@ class VoiceRecognitionHF:
             min_speech_volume = Config.VOICE_MIN_SPEECH_VOLUME
             
             if rms < min_speech_volume:
-                logger.debug(f"Skipping transcription - audio too quiet (RMS: {rms:.1f})")
                 return
                 
             # Check for consistent audio energy (not just brief spikes)
@@ -409,7 +407,6 @@ class VoiceRecognitionHF:
             
             # Require at least 30% of segments to have decent audio
             if active_segments / len(segments) < 0.3:
-                logger.debug(f"Skipping transcription - insufficient speech activity ({active_segments}/{len(segments)} segments)")
                 return
             
             # Create WAV file in memory
@@ -444,12 +441,10 @@ class VoiceRecognitionHF:
                 
                 # Check if the entire text is just a hallucination
                 if text in hallucination_phrases:
-                    logger.debug(f"Filtering hallucination: '{text}'")
                     return
                 
                 # Check if text is too short and likely a hallucination
                 if len(text.strip()) <= 2:
-                    logger.debug(f"Filtering short text: '{text}'")
                     return
                 
                 if text:
@@ -465,7 +460,7 @@ class VoiceRecognitionHF:
                         if command:
                             logger.info(f"🎯 Voice command: {command}")
                         else:
-                            logger.debug(f"🎯 Activation keyword detected: {Config.VOICE_ACTIVATION_KEYWORD}")
+                            logger.info(f"🎯 Activation keyword detected: {Config.VOICE_ACTIVATION_KEYWORD}")
                         
                         # Always pass the full text to the callback when activation keyword is found
                         self.command_callback(text)

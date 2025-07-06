@@ -5,11 +5,11 @@ from enum import Enum
 from datetime import datetime
 
 from .config import Config
-from .command_processor import ModerationCommand
+from .command_processor import ModerationCommand, CommandSessionLogger
 from ..platforms.twitch.twitch_bot import TwitchModeratorBot
 from ..platforms.kick.kick_bot import KickModeratorBot
 from ..platforms.kick.kick_username_logger import KickUsernameLogger, KickAIModerationHelper
-from ..utils.username_logger import UsernameLogger, AIModerationHelper
+from ..platforms.twitch.twitch_username_logger import TwitchUsernameLogger, TwitchAIModerationHelper
 
 logger = logging.getLogger(__name__)
 
@@ -92,11 +92,11 @@ class MultiPlatformManager:
             self.bots[Platform.TWITCH] = twitch_bot
             
             # Initialize username logger for Twitch
-            twitch_logger = UsernameLogger(max_usernames=50, update_interval=0.5)
+            twitch_logger = TwitchUsernameLogger(max_usernames=50, update_interval=0.5)
             self.username_loggers[Platform.TWITCH] = twitch_logger
             
             # Initialize AI helper for Twitch
-            twitch_ai_helper = AIModerationHelper(twitch_logger)
+            twitch_ai_helper = TwitchAIModerationHelper(twitch_logger)
             self.ai_helpers[Platform.TWITCH] = twitch_ai_helper
             
             logger.info("✅ Twitch platform initialized")
@@ -207,9 +207,15 @@ class MultiPlatformManager:
                 logger.error(f"No bot available for platform {platform.value}")
                 return False
             
+            # Use the session logger for [RESOLVE] and [EXECUTE]
+            session_logger = CommandSessionLogger(platform=platform.value, action=cmd.action, spoken_username=cmd.original_username or cmd.username or "-")
+            if cmd.username_resolved:
+                session_logger.log_resolve(cmd.username)
+            
             logger.info(f"🤖 Calling bot.execute_moderation_command for {platform.value}")
             success = await bot.execute_moderation_command(cmd)
-            logger.info(f"Command executed on {platform.value}: {success}")
+            session_logger.log_execute(cmd, success)
+            # logger.info(f"Command executed on {platform.value}: {success}")
             return success
             
         except Exception as e:
@@ -242,7 +248,7 @@ class MultiPlatformManager:
         Try to resolve username across all enabled platforms.
         Returns the first successful match found.
         """
-        logger.debug(f"🔍 Resolving username '{partial_username}' across platforms: {[p.value for p in self.enabled_platforms]}")
+        logger.info(f"🔍 Resolving username '{partial_username}' across platforms: {[p.value for p in self.enabled_platforms]}")
         
         for platform in self.enabled_platforms:
             ai_helper = self.ai_helpers.get(platform)
@@ -252,8 +258,6 @@ class MultiPlatformManager:
                     if resolved:
                         logger.info(f"✅ Username '{partial_username}' resolved to '{resolved}' via {platform.value}")
                         return resolved
-                    else:
-                        logger.debug(f"❌ No match found on {platform.value} for '{partial_username}'")
                 except Exception as e:
                     logger.error(f"Error resolving username on {platform.value}: {e}")
         

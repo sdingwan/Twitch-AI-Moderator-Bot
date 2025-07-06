@@ -25,10 +25,10 @@ import uvicorn
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from src.core.config import Config
 from src.voice.voice_recognition_hf import VoiceRecognitionHF
-from src.core.command_processor import CommandProcessor, ModerationCommand
+from src.core.command_processor import CommandProcessor, ModerationCommand, CommandSessionLogger
 from src.core.multi_platform_manager import MultiPlatformManager, Platform
 from src.platforms.twitch.twitch_bot import TwitchModeratorBot
-from src.utils.username_logger import UsernameLogger, AIModerationHelper
+from src.platforms.twitch.twitch_username_logger import TwitchUsernameLogger, TwitchAIModerationHelper
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -277,18 +277,18 @@ class WebAIModeratorBot:
         try:
             self.last_command = command_text
             self.last_command_time = datetime.now().isoformat()
-            
-            # Process the command
+            # [VOICE] and [CMD] logs
+            session_logger = None
             moderation_cmd = self.command_processor.process_command(command_text)
-            
             if moderation_cmd:
+                session_logger = CommandSessionLogger(platform="?", action=moderation_cmd.action, spoken_username=moderation_cmd.original_username or moderation_cmd.username or "-")
+                session_logger.log_voice(command_text)
+                session_logger.log_cmd()
                 # Show AI matching result if username was resolved
                 if moderation_cmd.original_username and moderation_cmd.username != moderation_cmd.original_username:
                     await self.broadcast_message(f"🤖 AI match: '{moderation_cmd.original_username}' → '{moderation_cmd.username}'")
-                
                 # Validate the command
                 is_valid, error_msg = self.command_processor.validate_command(moderation_cmd)
-                
                 if is_valid:
                     # Execute command using the multi-platform manager
                     if self.multi_platform_manager:
@@ -316,7 +316,6 @@ class WebAIModeratorBot:
                     await self.broadcast_message(f"❌ Invalid command: {error_msg}")
             else:
                 await self.broadcast_message(f"❓ Could not understand command: {command_text}")
-            
             await self.broadcast_status()
             
         except Exception as e:

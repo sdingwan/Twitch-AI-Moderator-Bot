@@ -8,6 +8,47 @@ import json
 
 logger = logging.getLogger(__name__)
 
+# --- Add this utility class ---
+class CommandSessionLogger:
+    def __init__(self, platform, action, spoken_username):
+        self.platform = platform
+        self.action = action
+        self.spoken_username = spoken_username
+
+    def log_voice(self, command_text):
+        logger.info(f"[VOICE] Command received: \"{command_text}\"")
+
+    def log_cmd(self, cmd):
+        # Build log line with only relevant fields
+        parts = [f"Action: {cmd.action}"]
+        if cmd.username:
+            parts.append(f"User: {cmd.username}")
+        if cmd.duration is not None:
+            parts.append(f"Duration: {cmd.duration}")
+        if cmd.reason:
+            parts.append(f"Reason: {cmd.reason}")
+        if cmd.weather_location:
+            parts.append(f"Location: {cmd.weather_location}")
+        logger.info(f"[CMD]   {' | '.join(parts)}")
+
+    def log_resolve(self, resolved_username):
+        logger.info(f"[RESOLVE] {self.platform}: '{self.spoken_username}' → '{resolved_username}'")
+
+    def log_execute(self, cmd, result):
+        # Build log line with only relevant fields
+        parts = [self.action.capitalize()]
+        if cmd.username:
+            parts.append(f"User: {cmd.username}")
+        if cmd.duration is not None:
+            parts.append(f"Duration: {cmd.duration}")
+        if cmd.reason:
+            parts.append(f"Reason: {cmd.reason}")
+        if cmd.weather_location:
+            parts.append(f"Location: {cmd.weather_location}")
+        status = "SUCCESS" if result else "FAILED"
+        logger.info(f"[EXECUTE] {self.platform}: {' | '.join(parts)} ... {status}")
+# --- End utility class ---
+
 @dataclass
 class ModerationCommand:
     action: str  # 'ban', 'timeout', 'unban', 'clear', 'slow', 'followers_only', 'subscribers_only', 'weather', etc.
@@ -44,38 +85,54 @@ class CommandProcessor:
             ModerationCommand object or None if command not recognized
         """
         command_text = command_text.strip()
-        logger.info(f"Processing command: {command_text}")
+        # [VOICE] log
+        # logger.info(f"Processing command: {command_text}")
         
         if not self.openai_client:
             logger.error("OpenAI client not available")
             return None
         
         moderation_cmd = self._ai_process_command(command_text)
-        
+        session_logger = None
         if moderation_cmd and moderation_cmd.username:
+            # [CMD] log
+            session_logger = CommandSessionLogger(
+                platform="?",  # Platform is not known at this point
+                action=moderation_cmd.action,
+                spoken_username=moderation_cmd.username
+            )
+            session_logger.log_voice(command_text)
+            session_logger.log_cmd(moderation_cmd)
             # Try to resolve the username using phonetic matching
             original_username = moderation_cmd.username
             resolved_username = self._resolve_username(moderation_cmd.username)
-            
             if resolved_username and resolved_username != original_username:
                 # Username was successfully resolved from recent chat
                 moderation_cmd.username = resolved_username
                 moderation_cmd.original_username = original_username
                 moderation_cmd.username_resolved = True
-                logger.info(f"Username resolved: '{original_username}' -> '{resolved_username}'")
+                # [RESOLVE] log
+                session_logger.log_resolve(resolved_username)
+                # logger.info(f"Username resolved: '{original_username}' -> '{resolved_username}'")
             elif resolved_username == original_username:
-                # Exact match found in recent chat
                 moderation_cmd.username_resolved = True
-                logger.info(f"Exact username match found in recent chat: '{original_username}'")
+                # [RESOLVE] log (exact match)
+                session_logger.log_resolve(resolved_username)
+                # logger.info(f"Exact username match found in recent chat: '{original_username}'")
             else:
                 # Username could not be resolved from recent chat
                 logger.warning(f"Could not resolve username from recent chat: '{original_username}'")
                 moderation_cmd.original_username = original_username
                 moderation_cmd.username_resolved = False
                 # Keep the original username for validation to catch this as an error
+        elif moderation_cmd:
+            # For commands without username (e.g., clear chat)
+            session_logger = CommandSessionLogger(platform="?", action=moderation_cmd.action, spoken_username="-")
+            session_logger.log_voice(command_text)
+            session_logger.log_cmd(moderation_cmd)
         
         if moderation_cmd:
-            logger.info(f"Command processed: {moderation_cmd}")
+            # logger.info(f"Command processed: {moderation_cmd}")
             return moderation_cmd
         else:
             logger.warning(f"Could not process command: {command_text}")

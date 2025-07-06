@@ -328,7 +328,6 @@ class TwitchHelixAPI:
                 json=message_data
             ) as response:
                 if response.status == 200:
-                    logger.debug(f"Message sent: {message}")
                     return True
                 else:
                     error_text = await response.text()

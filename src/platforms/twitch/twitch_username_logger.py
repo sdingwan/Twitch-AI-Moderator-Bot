@@ -15,7 +15,7 @@ from datetime import datetime, timedelta
 from typing import List, Dict, Optional, Tuple
 from collections import deque
 from openai import OpenAI
-from ..core.config import Config
+from ...core.config import Config
 
 # Import phonetic libraries with fallback
 try:
@@ -28,7 +28,7 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
-class UsernameLogger:
+class TwitchUsernameLogger:
     def __init__(self, max_usernames: int = 50, update_interval: int = 0.3):
         """
         Initialize the username logger
@@ -174,8 +174,6 @@ class UsernameLogger:
             'timestamp': datetime.now().isoformat()
         })
         
-        logger.debug(f"Added username: {username}")
-        
         # Update log file periodically
         current_time = time.time()
         if current_time - self.last_update >= self.update_interval:
@@ -191,8 +189,6 @@ class UsernameLogger:
                 
                 for entry in self.usernames:
                     f.write(f"{entry['timestamp']},{entry['username']}\n")
-            
-            logger.debug(f"Updated log file with {len(self.usernames)} usernames")
             
         except Exception as e:
             logger.error(f"Failed to update log file: {e}")
@@ -232,17 +228,13 @@ class UsernameLogger:
             Tuple of (best_match_username, similarity_score) or None if no good match
         """
         if not PHONETIC_AVAILABLE:
-            logger.debug("Phonetic libraries not available, skipping phonetic matching")
             return None
             
         if not self.usernames:
-            logger.debug("No usernames available for phonetic matching")
             return None
         
         spoken_name = spoken_name.lower().strip()
         recent_usernames = self.get_recent_usernames()
-        
-        logger.debug(f"Searching for phonetic match for '{spoken_name}' among {len(recent_usernames)} usernames")
         
         best_match = None
         best_score = 0.0
@@ -314,10 +306,8 @@ class UsernameLogger:
                 best_match = username
         
         if best_match and best_score >= threshold:
-            logger.info(f"Phonetic match: '{spoken_name}' -> '{best_match}' (score: {best_score:.3f})")
             return best_match, best_score
         else:
-            logger.debug(f"No phonetic match found for '{spoken_name}' (best score: {best_score:.3f}, threshold: {threshold})")
             return None
     
     def find_ai_similar_username(self, spoken_name: str) -> Optional[Tuple[str, str]]:
@@ -331,7 +321,7 @@ class UsernameLogger:
             Tuple of (best_match_username, reasoning) or None if no good match
         """
         if not self.usernames:
-            logger.warning("No usernames available for AI matching")
+            logger.warning("No usernames available for AI matching on twitch")
             return None
             
         if not self.openai_client:
@@ -407,10 +397,10 @@ Your response:"""
             return None
 
 
-class AIModerationHelper:
+class TwitchAIModerationHelper:
     """Helper class to integrate AI username matching with moderation commands"""
     
-    def __init__(self, username_logger: UsernameLogger):
+    def __init__(self, username_logger: TwitchUsernameLogger):
         self.username_logger = username_logger
     
     def resolve_username(self, spoken_username: str) -> Optional[str]:
