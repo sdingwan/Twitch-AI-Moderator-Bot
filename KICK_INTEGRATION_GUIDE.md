@@ -1,201 +1,160 @@
-# 🤖 Multi-Platform AI Moderator Bot - Kick.com Integration Guide
+# Kick.com Integration Guide
 
-## 📋 Overview
+This guide explains how to set up and use the AI Moderator Bot with Kick.com.
 
-Your AI Moderator Bot now supports both **Twitch** and **Kick.com** platforms! You can run the bot on one platform, both simultaneously, or switch between them as needed.
+## Overview
 
-## 🚀 Supported Features
+The AI Moderator Bot supports Kick.com as a moderation platform alongside Twitch. The bot can run on both platforms simultaneously or individually, with unified voice commands and cross-platform username resolution.
 
-### ✅ Kick.com Features
-- **Ban** users permanently
-- **Timeout** users (with duration in seconds)
-- **Unban** users (removes permanent bans)
-- **Untimeout** users (removes timeouts)
-- **Real-time chat monitoring** via Pusher WebSocket
-- **OAuth 2.1 authentication** with automatic token refresh
-- **Cross-platform username resolution**
+## Features
 
-### ⚠️ Platform Limitations
-| Feature | Twitch | Kick |
-|---------|--------|------|
-| Ban/Unban | ✅ | ✅ |
-| Timeout/Untimeout | ✅ | ✅ |
-| Slow Mode | ✅ | ❌ |
-| Follower-only Mode | ✅ | ❌ |
-| Subscriber-only Mode | ✅ | ❌ |
-| Emote-only Mode | ✅ | ❌ |
-| Clear Chat | ✅ | ❌ |
+### Supported Actions on Kick
 
-## 🔧 Setup Instructions
+**Direct API Support:**
+- ✅ Ban users (permanent)
+- ✅ Timeout users (with duration)
+- ✅ Unban/untimeout users
+- ✅ Send chat messages
 
-### 1. Get Kick.com API Credentials
+**Chat Mode Commands (via chat messages):**
+- ✅ Clear chat (`/clear`)
+- ✅ Slow mode (`/slow on/off [seconds]`)
+- ✅ Followers-only mode (`/followonly on/off [minutes]`)
+- ✅ Emote-only mode (`/emoteonly on/off`)
+- ✅ Subscribers-only mode (`/subonly on/off`)
 
-1. Go to [kick.com/settings/developer](https://kick.com/settings/developer)
-2. Create a new application
-3. Set the redirect URI to: `http://localhost:8000/auth/kick/callback`
-4. Copy your **Client ID** and **Client Secret**
+> **Note:** Since Kick's API doesn't currently support chat mode commands directly, these commands are sent as regular chat messages that moderators can execute. The bot will send the command (e.g., `/slow on 30`) followed by a confirmation message.
 
-### 2. Update Environment Variables
+### Voice Commands
 
-Add these to your `.env` file:
+All voice commands work the same way as on Twitch:
+- "Hey Brian, ban username"
+- "Hey Brian, timeout username for 10 minutes"
+- "Hey Brian, clear chat"
+- "Hey Brian, slow mode 30 seconds"
+- "Hey Brian, followers only 5 minutes"
+- "Hey Brian, emote only"
+- "Hey Brian, subscribers only"
 
-```bash
-# Kick.com Configuration
-KICK_CLIENT_ID=your_kick_client_id_here
-KICK_CLIENT_SECRET=your_kick_client_secret_here
+## How Chat Mode Commands Work
+
+Since Kick's API doesn't support chat mode commands directly, the bot implements a clever workaround:
+
+1. **Voice Command:** "Hey Brian, slow mode 30 seconds"
+2. **Bot Processing:** Recognizes the command and formats it as `/slow on 30`
+3. **Chat Message:** Bot sends `/slow on 30` to Kick chat
+4. **Moderator Execution:** A moderator (or the streamer) can execute this command
+5. **Confirmation:** Bot sends "🤖 Chat mode command sent: /slow on 30"
+
+This approach allows the bot to support all chat mode features even without direct API support.
+
+## Setup Instructions
+
+### 1. OAuth 2.1 Application Setup
+
+1. Go to [Kick.com Developer Portal](https://kick.com/developer)
+2. Create a new OAuth application:
+   - **Application Name:** AI Moderator Bot
+   - **Redirect URI:** `http://localhost:8000/auth/kick/callback`
+   - **Scopes:** Select all available scopes (chat, moderation, etc.)
+
+3. Note down your `client_id` and `client_secret`
+
+### 2. Environment Configuration
+
+Add these variables to your `.env` file:
+
+```env
+# Kick Configuration
+KICK_CLIENT_ID=your_client_id_here
+KICK_CLIENT_SECRET=your_client_secret_here
+KICK_CHANNEL=your_channel_name_here
 KICK_REDIRECT_URI=http://localhost:8000/auth/kick/callback
 
 # Multi-Platform Configuration
-ENABLED_PLATFORMS=twitch,kick  # or just 'kick' or 'twitch'
+ENABLED_PLATFORMS=twitch,kick  # or just 'kick' for Kick only
 ```
 
-### 3. OAuth Authentication
+### 3. OAuth Token Setup
 
-The bot uses **OAuth 2.1** for secure authentication:
+Run the OAuth setup script:
 
-1. Start the bot web interface
-2. Configure Kick channel in the web interface
-3. The system will guide you through OAuth authentication
-4. Access tokens are automatically refreshed
-
-## 🎮 Usage Examples
-
-### Option A: Twitch Only
-```json
-{
-  "platforms": ["twitch"],
-  "twitch_channel": "your_twitch_channel"
-}
+```bash
+python kick_oauth_setup.py
 ```
 
-### Option B: Kick Only
-```json
-{
-  "platforms": ["kick"],
-  "kick_channel": "your_kick_channel"
-}
+This will:
+1. Open your browser to Kick's OAuth page
+2. Ask you to authorize the application
+3. Automatically save the access and refresh tokens to your `.env` file
+
+### 4. Start the Bot
+
+```bash
+python web/main.py
 ```
 
-### Option C: Both Platforms
-```json
-{
-  "platforms": ["twitch", "kick"],
-  "twitch_channel": "your_twitch_channel",
-  "kick_channel": "your_kick_channel"
-}
-```
+The bot will automatically:
+- Connect to Kick using your OAuth tokens
+- Start monitoring chat for usernames
+- Enable voice commands for moderation
 
-## 🎤 Voice Commands
-
-All voice commands work across both platforms:
-
-```
-"Hey Brian, ban toxic_user for spamming"
-"Hey Brian, timeout annoying_chatter for 600 seconds"
-"Hey Brian, unban reformed_user"
-```
-
-When running on multiple platforms, commands execute on **all enabled platforms** simultaneously.
-
-## 🔧 Technical Architecture
-
-### Multi-Platform Manager
-- Coordinates between Twitch and Kick platforms
-- Unified command processing
-- Cross-platform username resolution
-- Independent platform operation
-
-### Kick Integration Components
-```
-src/platforms/kick/
-├── kick_api.py          # OAuth 2.1 & API client
-├── kick_bot.py          # Moderation logic
-├── kick_chat_monitor.py # Pusher WebSocket chat monitoring
-└── __init__.py
-```
-
-### Configuration Management
-- Platform-specific credential validation
-- Dynamic channel assignment
-- Automatic token refresh for Kick
-- Fallback mechanisms
-
-## 🚨 Important Notes
-
-### Rate Limiting
-- **Kick API**: Conservative 100 requests/minute
-- **Twitch API**: 800 requests/minute (Helix limit)
-
-### Authentication
-- **Kick**: OAuth 2.1 with PKCE (more secure)
-- **Twitch**: OAuth 2.0 (existing system)
-
-### Username Resolution
-- Cross-platform username matching
-- AI-powered phonetic matching for Twitch
-- Simple fuzzy matching for Kick
-- Recent chat history tracking
-
-## 🐛 Troubleshooting
+## Troubleshooting
 
 ### Common Issues
 
-**1. Kick OAuth fails**
-- Check redirect URI matches exactly: `http://localhost:8000/auth/kick/callback`
-- Verify Client ID and Client Secret
-- Ensure Kick app is active
+1. **"Missing Kick configuration"**
+   - Ensure all required environment variables are set
+   - Check that `KICK_CLIENT_ID`, `KICK_CLIENT_SECRET`, and `KICK_CHANNEL` are configured
 
-**2. Commands not executing on Kick**
-- Verify bot has moderation permissions in Kick channel
-- Check OAuth token is valid
-- Confirm channel name is correct (lowercase)
+2. **"Failed to connect to Kick API"**
+   - Verify your OAuth tokens are valid
+   - Run `python kick_oauth_setup.py` to refresh tokens
+   - Check that your channel name is correct
 
-**3. Chat monitoring not working**
-- Pusher connection uses public keys (no auth required)
-- Check network connectivity
-- Verify channel name format
+3. **"Chat mode commands not working"**
+   - Ensure you have moderator permissions in the channel
+   - Check that the bot account has permission to send chat messages
+   - Verify the command format in the chat logs
 
-### Debug Logs
-Enable debug logging to see detailed platform status:
-```python
-import logging
-logging.getLogger().setLevel(logging.DEBUG)
+### Token Refresh
+
+If you encounter authentication errors, your tokens may have expired. Run:
+
+```bash
+python kick_oauth_setup.py
 ```
 
-## 🔮 Future Enhancements
+This will refresh your tokens automatically.
 
-Planned features for future updates:
-- Kick-specific chat settings management
-- Enhanced cross-platform user tracking
-- Platform-specific command routing
-- Advanced moderation analytics
-- Custom platform-specific actions
+## Platform Comparison
 
-## 📖 API Reference
+| Feature | Twitch | Kick |
+|---------|--------|------|
+| Ban/Timeout | ✅ API | ✅ API |
+| Unban/Untimeout | ✅ API | ✅ API |
+| Clear Chat | ✅ API | ✅ Chat Message |
+| Slow Mode | ✅ API | ✅ Chat Message |
+| Followers Only | ✅ API | ✅ Chat Message |
+| Emote Only | ✅ API | ✅ Chat Message |
+| Subscribers Only | ✅ API | ✅ Chat Message |
+| Voice Commands | ✅ | ✅ |
+| Username Resolution | ✅ | ✅ |
 
-### Configuration Schema
-```typescript
-interface BotConfig {
-  platforms: ('twitch' | 'kick')[]
-  twitch_channel?: string
-  kick_channel?: string
-}
-```
+## Security Notes
 
-### Platform Status
-```typescript
-interface PlatformStatus {
-  [platform: string]: {
-    enabled: boolean
-    connected: boolean
-    bot_available: boolean
-  }
-}
-```
+- OAuth tokens are stored securely in your `.env` file
+- The bot only has the permissions you grant during OAuth setup
+- All moderation actions are logged for audit purposes
+- Username resolution uses AI to prevent targeting innocent users
 
----
+## Support
 
-## 🎉 Ready to Moderate!
+For issues specific to Kick integration:
+1. Check the troubleshooting section above
+2. Verify your OAuth setup is correct
+3. Ensure your channel permissions are properly configured
+4. Check the bot logs for detailed error messages
 
 Your AI Moderator Bot is now equipped to handle both Twitch and Kick.com! Start with one platform to test, then expand to multi-platform moderation as needed.
 

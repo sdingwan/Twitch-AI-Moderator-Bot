@@ -34,10 +34,11 @@ class VoiceRecognitionHF:
         self.chunk_size = 1024
         self.channels = 1
         
-        # Streamlink and FFmpeg processes for Twitch stream capture
+        # Streamlink and FFmpeg processes for stream capture
         self.ffmpeg_process = None
         self.streamlink_process = None
-        self.twitch_stream_url = None
+        self.primary_stream_url = None
+        self.primary_platform = None
         
         # Transcription logging
         self.transcription_log_file = "stream_transcription.log"
@@ -46,11 +47,65 @@ class VoiceRecognitionHF:
         # Initialize Hugging Face Inference Endpoint
         self._setup_hf_endpoint()
         
-        # Only setup Twitch stream if Twitch channel is configured
-        if Config.TWITCH_CHANNEL:
-            self._setup_twitch_stream()
+        # Determine primary audio source based on enabled platforms
+        self._determine_primary_audio_source()
+    
+    def _determine_primary_audio_source(self):
+        """Determine which platform to use for audio capture based on configuration"""
+        twitch_enabled = bool(Config.TWITCH_CHANNEL)
+        kick_enabled = bool(getattr(Config, 'KICK_CHANNEL', None))
+        
+        if twitch_enabled and kick_enabled:
+            # Both platforms enabled - prefer Twitch for now (could be made configurable)
+            self.primary_platform = 'twitch'
+            self.primary_stream_url = f"https://www.twitch.tv/{Config.TWITCH_CHANNEL}"
+            logger.info(f"🎤 Both platforms enabled - using Twitch audio: {Config.TWITCH_CHANNEL}")
+        elif twitch_enabled:
+            # Only Twitch enabled
+            self.primary_platform = 'twitch'
+            self.primary_stream_url = f"https://www.twitch.tv/{Config.TWITCH_CHANNEL}"
+            logger.info(f"🎤 Using Twitch audio: {Config.TWITCH_CHANNEL}")
+        elif kick_enabled:
+            # Only Kick enabled
+            self.primary_platform = 'kick'
+            self.primary_stream_url = f"https://kick.com/{Config.KICK_CHANNEL}"
+            logger.info(f"🎤 Using Kick audio: {Config.KICK_CHANNEL}")
         else:
-            logger.info("Skipping Twitch stream setup - no Twitch channel configured")
+            # No platforms configured
+            self.primary_platform = None
+            self.primary_stream_url = None
+            logger.warning("⚠️ No platforms configured for audio capture")
+            
+        # Setup stream capture if we have a source
+        if self.primary_stream_url:
+            self._setup_stream_capture()
+        else:
+            logger.warning("⚠️ No audio source available - voice recognition will not work")
+    
+    def _setup_stream_capture(self):
+        """Setup stream audio capture for the determined platform"""
+        try:
+            if not self.primary_stream_url:
+                raise ValueError("No primary stream URL configured")
+            
+            # Test streamlink and FFmpeg availability
+            try:
+                subprocess.run(['streamlink', '--version'], capture_output=True, check=True)
+                logger.info("✅ Streamlink found and ready")
+            except (subprocess.CalledProcessError, FileNotFoundError):
+                raise Exception("Streamlink not found. Please install streamlink to capture stream audio.")
+            
+            try:
+                subprocess.run(['ffmpeg', '-version'], capture_output=True, check=True)
+                logger.info("✅ FFmpeg found and ready")
+            except (subprocess.CalledProcessError, FileNotFoundError):
+                raise Exception("FFmpeg not found. Please install FFmpeg to process stream audio.")
+            
+            logger.info(f"✅ Stream setup successful for {self.primary_platform}: {self.primary_stream_url}")
+            
+        except Exception as e:
+            logger.error(f"Failed to setup stream capture: {e}")
+            logger.warning("Continuing without stream audio capture")
     
     def _setup_hf_endpoint(self):
         """Setup Hugging Face Inference Endpoint for Whisper"""
@@ -72,35 +127,6 @@ class VoiceRecognitionHF:
         except Exception as e:
             logger.error(f"Failed to setup HF endpoint: {e}")
             raise
-    
-    def _setup_twitch_stream(self):
-        """Setup Twitch stream audio capture"""
-        try:
-            # Build Twitch stream URL
-            if not Config.TWITCH_CHANNEL:
-                raise ValueError("Twitch channel not configured")
-            
-            self.twitch_stream_url = f"https://www.twitch.tv/{Config.TWITCH_CHANNEL}"
-            
-            # Test streamlink and FFmpeg availability
-            try:
-                subprocess.run(['streamlink', '--version'], capture_output=True, check=True)
-                logger.info("✅ Streamlink found and ready")
-            except (subprocess.CalledProcessError, FileNotFoundError):
-                raise Exception("Streamlink not found. Please install streamlink to capture Twitch stream audio.")
-            
-            try:
-                subprocess.run(['ffmpeg', '-version'], capture_output=True, check=True)
-                logger.info("✅ FFmpeg found and ready")
-            except (subprocess.CalledProcessError, FileNotFoundError):
-                raise Exception("FFmpeg not found. Please install FFmpeg to process stream audio.")
-            
-            logger.info(f"✅ Twitch stream setup successful for channel: {Config.TWITCH_CHANNEL}")
-            
-        except Exception as e:
-            logger.error(f"Failed to setup Twitch stream: {e}")
-            # Don't raise the exception - let it continue without Twitch
-            logger.warning("Continuing without Twitch stream audio capture")
     
     def _setup_transcription_logging(self):
         """Setup transcription logging to file"""
@@ -146,13 +172,17 @@ class VoiceRecognitionHF:
             logger.error(f"Failed to log transcription: {e}")
     
     def start_listening(self):
-        """Start listening for voice commands from Twitch stream"""
+        """Start listening for voice commands from the configured stream"""
         if self.is_listening:
             logger.warning("Voice recognition is already listening")
             return
         
+        if not self.primary_stream_url:
+            logger.error("No audio source configured - cannot start voice recognition")
+            return
+        
         try:
-            # Start FFmpeg process to capture Twitch stream audio
+            # Start FFmpeg process to capture stream audio
             self._start_ffmpeg_capture()
             
             self.is_listening = True
@@ -161,7 +191,7 @@ class VoiceRecognitionHF:
             self.listen_thread = threading.Thread(target=self._process_audio_loop, daemon=True)
             self.listen_thread.start()
             
-            logger.info("🎤 Voice recognition started with Twitch stream audio capture")
+            logger.info(f"🎤 Voice recognition started with {self.primary_platform} stream audio capture")
             
         except Exception as e:
             logger.error(f"Failed to start voice recognition: {e}")
@@ -200,18 +230,35 @@ class VoiceRecognitionHF:
         logger.info("Voice recognition stopped")
     
     def _start_ffmpeg_capture(self):
-        """Start streamlink process to capture Twitch stream audio"""
+        """Start streamlink process to capture stream audio from the primary platform"""
         try:
-            # Use streamlink to get the stream and pipe directly to FFmpeg for audio processing
-            streamlink_cmd = [
-                'streamlink',
-                '--stdout',  # Output to stdout
-                '--twitch-disable-ads',  # Disable ads for better audio continuity
-                '--retry-streams', '5',  # Retry on stream errors
-                '--retry-open', '3',  # Retry opening stream
-                f'twitch.tv/{Config.TWITCH_CHANNEL}',
-                'audio_only,worst'  # Try audio_only first, fallback to worst quality for audio extraction
-            ]
+            if not self.primary_stream_url or not self.primary_platform:
+                raise ValueError("No primary stream configured")
+            
+            # Build streamlink command based on platform
+            if self.primary_platform == 'twitch':
+                # Twitch-specific streamlink options
+                streamlink_cmd = [
+                    'streamlink',
+                    '--stdout',  # Output to stdout
+                    '--twitch-disable-ads',  # Disable ads for better audio continuity
+                    '--retry-streams', '5',  # Retry on stream errors
+                    '--retry-open', '3',  # Retry opening stream
+                    self.primary_stream_url,
+                    'audio_only,worst'  # Try audio_only first, fallback to worst quality for audio extraction
+                ]
+            elif self.primary_platform == 'kick':
+                # Kick-specific streamlink options (no special ad options)
+                streamlink_cmd = [
+                    'streamlink',
+                    '--stdout',  # Output to stdout
+                    '--retry-streams', '5',  # Retry on stream errors
+                    '--retry-open', '3',  # Retry opening stream
+                    self.primary_stream_url,
+                    'worst'  # Use worst quality for audio extraction (Kick may not have audio_only)
+                ]
+            else:
+                raise ValueError(f"Unsupported platform: {self.primary_platform}")
             
             # Start streamlink process that pipes to FFmpeg for audio extraction
             streamlink_process = subprocess.Popen(
@@ -247,7 +294,7 @@ class VoiceRecognitionHF:
             # Store reference to streamlink process for cleanup
             self.streamlink_process = streamlink_process
             
-            logger.info(f"Started streamlink + FFmpeg capture for Twitch channel: {Config.TWITCH_CHANNEL}")
+            logger.info(f"Started streamlink + FFmpeg capture for {self.primary_platform}: {self.primary_stream_url}")
             
         except Exception as e:
             logger.error(f"Failed to start streamlink capture: {e}")

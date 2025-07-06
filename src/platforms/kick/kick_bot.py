@@ -51,6 +51,8 @@ class KickModeratorBot:
         Returns:
             True if command was executed successfully, False otherwise
         """
+        logger.info(f"🎯 Kick bot received command: {cmd.action} (username: {cmd.username}, duration: {cmd.duration})")
+        
         if not self.is_connected:
             logger.error("Bot is not connected to Kick API")
             return False
@@ -58,7 +60,7 @@ class KickModeratorBot:
         try:
             success = False
             
-            # Kick supports these core moderation actions
+            # Kick supports these core moderation actions via API
             if cmd.action == 'ban':
                 success = await self.api.ban_user(cmd.username, cmd.reason)
             elif cmd.action == 'timeout':
@@ -68,9 +70,7 @@ class KickModeratorBot:
             elif cmd.action == 'untimeout':
                 success = await self.api.unban_user(cmd.username)
             else:
-                logger.warning(f"Unsupported action for Kick: {cmd.action}")
-                # For unsupported actions, we'll send a chat message explaining
-                await self.api.send_chat_message(f"⚠️ Action '{cmd.action}' not supported on Kick platform")
+                logger.warning(f"Action '{cmd.action}' is not supported by the Kick API. Skipping.")
                 return False
             
             if success:
@@ -140,7 +140,7 @@ class KickModeratorBot:
         try:
             await self.api.send_chat_message("🤖 AI Moderator is online on Kick!")
         except Exception as e:
-            logger.error(f"Failed to send status message to Kick: {e}")
+            logger.error(f"Failed to send status message to Kick: {e}") 
     
     async def send_username_not_found_message(self, spoken_username: str, action: str):
         """Send message to Kick chat when username cannot be found for moderation"""

@@ -92,13 +92,17 @@ class WebAIModeratorBot:
             self.enabled_platforms = config.platforms
             self.current_channels = {}
             
+            logger.info(f"🔧 Initializing bot with platforms: {config.platforms}")
+            
             if 'twitch' in config.platforms and config.twitch_channel:
                 Config.set_twitch_channel(config.twitch_channel)
                 self.current_channels['twitch'] = config.twitch_channel
+                logger.info(f"🔧 Twitch channel set to: {config.twitch_channel}")
             
             if 'kick' in config.platforms and config.kick_channel:
                 Config.set_kick_channel(config.kick_channel)
                 self.current_channels['kick'] = config.kick_channel
+                logger.info(f"🔧 Kick channel set to: {config.kick_channel}")
             
             # Validate platform-specific configuration
             missing_vars = self._validate_platform_config(config.platforms)
@@ -112,14 +116,13 @@ class WebAIModeratorBot:
             if not success:
                 raise Exception("Failed to initialize multi-platform manager")
             
-            # Initialize command processor with the primary AI helper
+            # Initialize command processor with the multi-platform manager
             from src.core.command_processor import CommandProcessor
             self.command_processor = CommandProcessor()
             
-            # Set up the AI helper for username resolution
-            primary_ai_helper = self.multi_platform_manager.get_primary_ai_helper()
-            if primary_ai_helper:
-                self.command_processor.set_phonetic_helper(primary_ai_helper)
+            # Set up the multi-platform manager for cross-platform username resolution
+            if self.multi_platform_manager:
+                self.command_processor.set_phonetic_helper(self.multi_platform_manager)
             
             # Initialize voice recognition
             self.voice_recognition = VoiceRecognitionHF(command_callback=self._on_voice_command)
@@ -592,7 +595,10 @@ async def websocket_endpoint(websocket: WebSocket):
 @app.get("/", response_class=FileResponse)
 async def get_index():
     """Serve the main web interface"""
-    return FileResponse("frontend.html")
+    import os
+    # Get the absolute path to frontend.html
+    frontend_path = os.path.join(os.path.dirname(__file__), "frontend.html")
+    return FileResponse(frontend_path)
 
 @app.post("/api/stop_platform")
 async def stop_platform(request: Dict[str, str]):

@@ -230,16 +230,18 @@ class KickAPI:
                 'Content-Type': 'application/json'
             }
             
-            # Prepare ban data according to Kick API format
+            # Prepare ban data according to official Kick API format
             ban_data = {
-                'broadcaster_user_id': self.broadcaster_user_id,
-                'user_id': user_id,
-                'reason': reason or 'Moderation action via voice command'
+                'broadcaster_user_id': int(self.broadcaster_user_id),  # Ensure integer
+                'user_id': int(user_id),  # Convert string to integer as required by API
+                'reason': (reason or 'Moderation action via voice command')[:100]  # Limit to 100 chars
             }
             
             # Add duration for timeout (duration in minutes for Kick API)
             if duration:
-                ban_data['duration'] = duration // 60  # Convert seconds to minutes
+                ban_data['duration'] = max(1, min(10080, duration // 60))  # Convert seconds to minutes, clamp to 1-10080
+            
+            logger.debug(f"Ban request data: {ban_data}")
             
             async with self.session.post(
                 f"{self.base_url}/moderation/bans",
@@ -278,9 +280,11 @@ class KickAPI:
             }
             
             unban_data = {
-                'broadcaster_user_id': self.broadcaster_user_id,
-                'user_id': user_id
+                'broadcaster_user_id': int(self.broadcaster_user_id),  # Ensure integer
+                'user_id': int(user_id)  # Convert string to integer as required by API
             }
+            
+            logger.debug(f"Unban request data: {unban_data}")
             
             async with self.session.delete(
                 f"{self.base_url}/moderation/bans",
@@ -306,7 +310,6 @@ class KickAPI:
                 logger.warning("Rate limit exceeded for chat message")
                 return False
 
-            import requests
             headers = {
                 'Authorization': f'Bearer {self.access_token}',
                 'Content-Type': 'application/json'
@@ -319,28 +322,70 @@ class KickAPI:
             }
 
             url = "https://api.kick.com/public/v1/chat"
-            response = requests.post(url, headers=headers, json=message_data)
-            if response.status_code == 200:
-                logger.debug(f"Message sent to Kick: {message}")
-                return True
-            else:
-                logger.error(f"Failed to send message to Kick: {response.status_code} - {response.text}")
-                return False
+            async with self.session.post(url, headers=headers, json=message_data) as response:
+                if response.status == 200:
+                    logger.debug(f"Message sent to Kick: {message}")
+                    return True
+                else:
+                    error_text = await response.text()
+                    logger.error(f"Failed to send message to Kick: {response.status} - {error_text}")
+                    return False
 
         except Exception as e:
             logger.error(f"Error sending chat message to Kick: {e}")
             return False
     
     async def _get_user_id(self, username: str) -> Optional[str]:
-        """Get user ID from username using Kick API"""
+        """Get user ID from username using Kick API with exact working headers"""
         try:
-            # Kick's user lookup endpoint
-            async with self.session.get(
-                f"https://kick.com/api/v2/users/{username.lower()}"
-            ) as response:
+            import json
+            
+            # Use the exact same working approach as the user's script
+            headers = {
+                "User-Agent": "Mozilla/5.0 (compatible)",
+                "Accept": "application/json",
+                "Referer": "https://kick.com/",
+                "Origin": "https://kick.com"
+            }
+            
+            # Try to get user info through their channel (same as working script)
+            channel_url = f"https://kick.com/api/v2/channels/{username.lower()}"
+            async with self.session.get(channel_url, headers=headers, timeout=10) as response:
                 if response.status == 200:
-                    data = await response.json()
-                    return str(data['id'])
+                    # Manually parse JSON to avoid content-type issues
+                    try:
+                        text = await response.text()
+                        data = json.loads(text)
+                        broadcaster_id = data.get("user", {}).get("id")
+                        if broadcaster_id:
+                            user_id = str(broadcaster_id)
+                            logger.debug(f"✅ Got user ID for {username} via channel lookup: {user_id}")
+                            return user_id
+                    except Exception as e:
+                        logger.error(f"JSON parsing error for {username}: {e}")
+                        return None
+                elif response.status == 403:
+                    logger.error(f"Access forbidden for {username} - blocked by security policy")
+                    return None
+                elif response.status == 404:
+                    logger.debug(f"Channel not found for {username}, trying direct user lookup...")
+                else:
+                    logger.warning(f"Channel lookup failed for {username}: {response.status}")
+            
+            # Fallback: Try direct user lookup (may not work for all users)
+            user_url = f"https://kick.com/api/v2/users/{username.lower()}"
+            async with self.session.get(user_url, headers=headers, timeout=10) as response:
+                if response.status == 200:
+                    try:
+                        text = await response.text()
+                        data = json.loads(text)
+                        if 'id' in data:
+                            user_id = str(data['id'])
+                            logger.debug(f"✅ Got user ID for {username} via direct lookup: {user_id}")
+                            return user_id
+                    except Exception as e:
+                        logger.error(f"JSON parsing error for {username}: {e}")
+                        return None
                 else:
                     logger.error(f"Failed to get user ID for {username}: {response.status}")
                     return None
@@ -350,20 +395,20 @@ class KickAPI:
             return None
     
     async def get_channel_info(self, channel_slug: str) -> Optional[Dict]:
-        """Get channel information using Kick's public API"""
+        """Get channel information using Kick's public API with working headers"""
         try:
             if not self.session:
                 logger.error("No active session for Kick API")
                 return None
                 
-            # Use the same public API endpoint with browser headers to avoid security blocks
+            # Use the same working headers as the user's script
             headers = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-                'Accept': 'application/json, text/plain, */*',
-                'Accept-Language': 'en-US,en;q=0.9',
-                'Referer': f'https://kick.com/{channel_slug}',
-                'Origin': 'https://kick.com'
+                "User-Agent": "Mozilla/5.0 (compatible)",
+                "Accept": "application/json",
+                "Referer": "https://kick.com/",
+                "Origin": "https://kick.com"
             }
+            
             async with self.session.get(
                 f"https://kick.com/api/v2/channels/{channel_slug.lower()}",
                 headers=headers
@@ -382,18 +427,17 @@ class KickAPI:
             return None
     
     async def _get_chatroom_id(self) -> Optional[str]:
-        """Get chatroom ID for the current channel using requests (not aiohttp)"""
+        """Get chatroom ID for the current channel using aiohttp"""
         try:
-            import requests
             headers = {"User-Agent": "Mozilla/5.0 (compatible; TranslatorBot/1.0)"}
-            response = requests.get(f"https://kick.com/api/v2/channels/{Config.KICK_CHANNEL}", headers=headers)
-            if response.status_code == 200:
-                data = response.json()
-                return str(data['chatroom']['id'])
-            else:
-                error_text = response.text
-                logger.error(f"Failed to get chatroom ID: {response.status_code} - {error_text}")
-                return None
+            async with self.session.get(f"https://kick.com/api/v2/channels/{Config.KICK_CHANNEL}", headers=headers) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    return str(data['chatroom']['id'])
+                else:
+                    error_text = await response.text()
+                    logger.error(f"Failed to get chatroom ID: {response.status} - {error_text}")
+                    return None
         except Exception as e:
             logger.error(f"Error getting chatroom ID: {e}")
             return None

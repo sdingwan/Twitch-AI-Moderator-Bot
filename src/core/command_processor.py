@@ -82,12 +82,19 @@ class CommandProcessor:
             return None
     
     def _resolve_username(self, spoken_username: str) -> Optional[str]:
-        """Resolve a spoken username using AI matching"""
+        """Resolve a spoken username using AI matching across all available platforms"""
         if not self.phonetic_helper:
             logger.debug("No AI username helper available, cannot verify username from recent chat")
             return None
         
         try:
+            # If it's a multi-platform manager, try to resolve across all platforms
+            if hasattr(self.phonetic_helper, 'resolve_username_across_platforms'):
+                resolved = self.phonetic_helper.resolve_username_across_platforms(spoken_username)
+                if resolved:
+                    return resolved
+            
+            # Fallback to single platform resolution
             resolved = self.phonetic_helper.resolve_username(spoken_username)
             return resolved
         except Exception as e:

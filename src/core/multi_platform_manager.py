@@ -196,6 +196,7 @@ class MultiPlatformManager:
     
     async def execute_command_on_platform(self, cmd: ModerationCommand, platform: Platform) -> bool:
         """Execute a moderation command on a specific platform"""
+        logger.info(f"🎯 Executing command '{cmd.action}' on platform: {platform.value}")
         try:
             if platform not in self.enabled_platforms:
                 logger.warning(f"Platform {platform.value} is not enabled")
@@ -206,6 +207,7 @@ class MultiPlatformManager:
                 logger.error(f"No bot available for platform {platform.value}")
                 return False
             
+            logger.info(f"🤖 Calling bot.execute_moderation_command for {platform.value}")
             success = await bot.execute_moderation_command(cmd)
             logger.info(f"Command executed on {platform.value}: {success}")
             return success
@@ -224,52 +226,43 @@ class MultiPlatformManager:
         return results
     
     async def execute_command_on_enabled_platforms(self, cmd: ModerationCommand) -> Dict[Platform, bool]:
-        """Execute command based on ENABLED_PLATFORMS configuration"""
-        # Check if specific platforms are configured
-        enabled_platforms_config = getattr(Config, 'ENABLED_PLATFORMS', 'twitch,kick').lower()
+        """Execute command based on enabled platforms"""
+        logger.info(f"🚀 Multi-platform manager executing command '{cmd.action}' on enabled platforms: {[p.value for p in self.enabled_platforms]}")
         
-        if enabled_platforms_config == 'both' or 'twitch,kick' in enabled_platforms_config:
+        # Execute on all enabled platforms (not based on environment variable)
+        if self.enabled_platforms:
+            logger.info(f"📡 Executing on ALL enabled platforms: {[p.value for p in self.enabled_platforms]}")
             return await self.execute_command_on_all_platforms(cmd)
-        elif 'twitch' in enabled_platforms_config:
-            result = await self.execute_command_on_platform(cmd, Platform.TWITCH)
-            return {Platform.TWITCH: result}
-        elif 'kick' in enabled_platforms_config:
-            result = await self.execute_command_on_platform(cmd, Platform.KICK)
-            return {Platform.KICK: result}
         else:
-            logger.warning(f"Unknown platform configuration: {enabled_platforms_config}")
+            logger.warning("No platforms are enabled")
             return {}
     
-    def resolve_username_across_platforms(self, partial_username: str) -> Dict[Platform, List[str]]:
+    def resolve_username_across_platforms(self, partial_username: str) -> Optional[str]:
         """
-        Resolve username across all enabled platforms
-        Returns matching usernames from each platform
+        Try to resolve username across all enabled platforms.
+        Returns the first successful match found.
         """
-        matches = {}
+        logger.debug(f"🔍 Resolving username '{partial_username}' across platforms: {[p.value for p in self.enabled_platforms]}")
         
         for platform in self.enabled_platforms:
-            platform_matches = []
-            
-            if platform == Platform.TWITCH:
-                ai_helper = self.ai_helpers.get(Platform.TWITCH)
-                if ai_helper:
-                    # Use Twitch's AI-based matching
-                    platform_matches = ai_helper.find_best_username_matches(partial_username)
-            
-            elif platform == Platform.KICK:
-                # Use Kick's AI-powered username matching (same as Twitch)
-                ai_helper = self.ai_helpers.get(Platform.KICK)
-                if ai_helper:
-                    platform_matches = ai_helper.find_best_username_matches(partial_username)
-                else:
-                    # Fallback to simple fuzzy matching
-                    kick_usernames = list(self.unified_usernames)
-                    platform_matches = [username for username in kick_usernames 
-                                      if partial_username.lower() in username.lower()][:5]
-            
-            matches[platform] = platform_matches
+            ai_helper = self.ai_helpers.get(platform)
+            if ai_helper:
+                try:
+                    resolved = ai_helper.resolve_username(partial_username)
+                    if resolved:
+                        logger.info(f"✅ Username '{partial_username}' resolved to '{resolved}' via {platform.value}")
+                        return resolved
+                    else:
+                        logger.debug(f"❌ No match found on {platform.value} for '{partial_username}'")
+                except Exception as e:
+                    logger.error(f"Error resolving username on {platform.value}: {e}")
         
-        return matches
+        logger.warning(f"❌ No username match found across any platform for: '{partial_username}'")
+        return None
+    
+    def resolve_username(self, partial_username: str) -> Optional[str]:
+        """Fallback method for single platform resolution (for compatibility)"""
+        return self.resolve_username_across_platforms(partial_username)
     
     async def _on_command_executed(self, cmd: ModerationCommand, success: bool):
         """Callback when a command is executed on any platform"""
