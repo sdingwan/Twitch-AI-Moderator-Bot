@@ -174,8 +174,6 @@ class MultiPlatformManager:
                 except Exception as e:
                     logger.error(f"Error stopping {platform.value} bot: {e}")
             
-            # Chat monitoring is now handled by username loggers, so no separate chat monitors to stop
-            
             # Stop username loggers
             for platform, logger_instance in self.username_loggers.items():
                 try:
@@ -235,8 +233,25 @@ class MultiPlatformManager:
         """Execute command based on enabled platforms"""
         logger.info(f"🚀 Multi-platform manager executing command '{cmd.action}' on enabled platforms: {[p.value for p in self.enabled_platforms]}")
         
-        # Execute on all enabled platforms (not based on environment variable)
-        if self.enabled_platforms:
+        user_required_actions = ['ban', 'unban', 'timeout', 'untimeout', 'restrict', 'unrestrict']
+        if cmd.action in user_required_actions and hasattr(self, 'last_username_resolution_map') and self.last_username_resolution_map:
+            logger.info(f"📡 Executing on platforms where username was found: {[p.value for p in self.last_username_resolution_map.keys()]}")
+            results = {}
+            for platform, resolved_username in self.last_username_resolution_map.items():
+                # Use a copy of the command with the correct username for this platform
+                platform_cmd = ModerationCommand(
+                    action=cmd.action,
+                    username=resolved_username,
+                    duration=cmd.duration,
+                    reason=cmd.reason,
+                    additional_params=cmd.additional_params,
+                    original_username=cmd.original_username,
+                    weather_location=cmd.weather_location,
+                    username_resolved=True
+                )
+                results[platform] = await self.execute_command_on_platform(platform_cmd, platform)
+            return results
+        elif self.enabled_platforms:
             logger.info(f"📡 Executing on ALL enabled platforms: {[p.value for p in self.enabled_platforms]}")
             return await self.execute_command_on_all_platforms(cmd)
         else:
@@ -246,10 +261,15 @@ class MultiPlatformManager:
     def resolve_username_across_platforms(self, partial_username: str) -> Optional[str]:
         """
         Try to resolve username across all enabled platforms.
-        Returns the first successful match found.
+        Returns the first successful match found (for legacy compatibility),
+        but also stores a mapping of all platforms where a match was found.
         """
         logger.info(f"🔍 Resolving username '{partial_username}' across platforms: {[p.value for p in self.enabled_platforms]}")
         
+        self.last_username_resolution = None
+        self.last_username_resolution_platforms = set()
+        self.last_username_resolution_map = {}  # {platform: resolved_username}
+        first_match = None
         for platform in self.enabled_platforms:
             ai_helper = self.ai_helpers.get(platform)
             if ai_helper:
@@ -257,12 +277,21 @@ class MultiPlatformManager:
                     resolved = ai_helper.resolve_username(partial_username)
                     if resolved:
                         logger.info(f"✅ Username '{partial_username}' resolved to '{resolved}' via {platform.value}")
-                        return resolved
+                        self.last_username_resolution_map[platform] = resolved
+                        if not first_match:
+                            first_match = resolved
                 except Exception as e:
                     logger.error(f"Error resolving username on {platform.value}: {e}")
-        
-        logger.warning(f"❌ No username match found across any platform for: '{partial_username}'")
-        return None
+        if self.last_username_resolution_map:
+            self.last_username_resolution = first_match
+            self.last_username_resolution_platforms = set(self.last_username_resolution_map.keys())
+            return first_match
+        else:
+            logger.warning(f"❌ No username match found across any platform for: '{partial_username}'")
+            self.last_username_resolution = None
+            self.last_username_resolution_platforms = set()
+            self.last_username_resolution_map = {}
+            return None
     
     def resolve_username(self, partial_username: str) -> Optional[str]:
         """Fallback method for single platform resolution (for compatibility)"""
